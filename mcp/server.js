@@ -4,7 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { resolvePlace } from '../src/resolve/wrapper.js';
 import { savePlace } from '../src/maps/save.js';
-import { attachNote } from '../src/maps/note.js';
+import { attachNote, clearNote } from '../src/maps/note.js';
 import { listRegions } from '../src/index.js';
 import { benchmarkSummary } from '../src/storage/benchmark.js';
 import { smokeCheck } from '../src/smoke.js';
@@ -56,6 +56,17 @@ server.registerTool('attach_note', {
     mode: z.enum(['safeAttachOrSidecar', 'attachOnly']).optional(),
   },
 }, async ({ mode, ...payload }) => run(() => attachNote(payload, { mode })));
+
+server.registerTool('clear_note', {
+  title: 'Clear note',
+  description: 'Clear (remove) the note on the EXACT saved place, opened via its saved list. Uses the same nearest-ancestor safety guard as attach_note and returns previousText so the change can be undone. Never clears a sibling place.',
+  inputSchema: {
+    expectedName: z.string().describe('Expected place name; must appear on the saved place card in the list'),
+    listName: z.string().describe('The saved list the place is in'),
+    expectedAddress: z.string().optional(),
+    negativeNames: z.array(z.string()).optional(),
+  },
+}, async (payload) => run(() => clearNote(payload, {})));
 
 server.registerTool('list_regions', {
   title: 'List regions',

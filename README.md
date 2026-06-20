@@ -55,6 +55,18 @@ GOOGLE_MAPS_PROFILE=/path/to/google-maps-profile npm run login
 Sign in, open Google Maps, then press Enter. Every later run reuses that profile
 headlessly. No Google credentials are ever passed to or stored by this tool.
 
+**Headless server (no display):** use the noVNC wrapper, which starts a virtual
+display and exposes it in your browser:
+
+```bash
+sudo apt-get install -y xvfb x11vnc novnc websockify   # one-time prereqs
+GOOGLE_MAPS_PROFILE=/path/to/google-maps-profile ./scripts/login-server.sh
+```
+
+It prints a `127.0.0.1:6080` noVNC URL (tunnel it over SSH), where you sign in;
+then press Enter in the terminal to save and shut everything down. Tool paths are
+overridable via env (`X11VNC`, `NOVNC_PROXY`, `NODE_BIN`, `DISPLAY_NUM`, ports).
+
 ## Configuration
 
 All paths and tuning come from environment variables (see `.env.example`). Nothing
@@ -151,7 +163,8 @@ restarting the gateway by sending `/reload-mcp` in Hermes.
 |---|---|---|
 | `resolve_place` | URL/text → one candidate + `savePayload` (or `needsBrowserSnapshot`) | only on the weaker path |
 | `save_place` | Save a confirmed candidate to the exact regional list (`dryRun` supported) | yes |
-| `attach_note` | Attach a note to the exact place, else write a sidecar record / refuse | yes |
+| `attach_note` | Attach a note to the exact place (via its saved list), else sidecar / refuse | yes |
+| `clear_note` | Remove the note on the exact place (via its saved list); returns previousText | yes |
 | `list_regions` | Return the region → list mapping | no |
 | `benchmark_summary` | Summarize resolver/save performance | no |
 | `smoke_check` | Safe diagnostics (node, Playwright, profile, region config) | no |
@@ -162,6 +175,7 @@ restarting the gateway by sending `/reload-mcp` in Hermes.
 gmap-place resolve '<instagram/maps url | place text>'
 PLACE_QUERY='…' LIST_NAME='Taipei' EXPECTED_NAME='…' DRY_RUN=1 gmap-place save
 EXPECTED_NAME='…' LIST_NAME='彰化' SOURCE_URL='…' RECOMMENDATION='…' gmap-place attach
+EXPECTED_NAME='…' LIST_NAME='彰化' gmap-place clear-note
 gmap-place regions
 gmap-place benchmark 100
 ```

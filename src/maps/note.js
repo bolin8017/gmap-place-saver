@@ -83,6 +83,44 @@ export async function findExactNoteInList(page, criteria, maxScrolls = 10) {
   return sel;
 }
 
+// An empty note collapses to a "新增附註" button (no open textarea). Click the
+// button belonging to the expected place — chosen by the SHALLOWEST ancestor
+// whose text contains expectedName, so a sibling's button (whose name only
+// appears far up in the shared list container) is not opened by mistake.
+async function clickPlaceAddNoteButton(page, expectedName, maxDepth = 8) {
+  return page.evaluate(({ name, depthLimit }) => {
+    const txt = (n) => (n?.innerText || n?.textContent || '').trim();
+    const buttons = [...document.querySelectorAll('button')]
+      .filter((b) => /新增附註|附註/.test(`${b.getAttribute('aria-label') || ''} ${txt(b)}`));
+    let best = null;
+    let bestDepth = Infinity;
+    for (const b of buttons) {
+      let p = b;
+      for (let d = 0; p && d <= depthLimit; d++, p = p.parentElement) {
+        if (txt(p).includes(name)) {
+          if (d < bestDepth) { bestDepth = d; best = b; }
+          break;
+        }
+      }
+    }
+    if (best) { best.scrollIntoView({ block: 'center' }); best.click(); return bestDepth; }
+    return -1;
+  }, { name: expectedName, depthLimit: maxDepth });
+}
+
+// Surface the exact place's note textarea whether it is already open (has a
+// note) or collapsed to a 新增附註 button (no note yet).
+async function openPlaceNoteField(page, criteria) {
+  let sel = await findExactNoteInList(page, criteria);
+  if (sel.best?.accepted) return sel;
+  const depth = await clickPlaceAddNoteButton(page, criteria.expectedName);
+  if (depth >= 0) {
+    await page.waitForTimeout(1200);
+    sel = await findExactNoteInList(page, criteria);
+  }
+  return sel;
+}
+
 export async function attachNote(payload = {}, { config = loadConfig(), mode = 'safeAttachOrSidecar' } = {}) {
   const {
     expectedName,
@@ -144,9 +182,9 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
     page.setDefaultTimeout(15000);
 
     await openSavedList(page, listName);
-    const sel = await findExactNoteInList(page, criteria);
+    const sel = await openPlaceNoteField(page, criteria);
     if (!sel.best?.accepted) {
-      return await fallback(`exact-place note textarea not found in list "${listName}"`, {
+      return await fallback(`exact-place note field not found in list "${listName}"`, {
         ranked: (sel.ranked || []).slice(0, 3).map((r) => ({ i: r.i, score: r.score })),
       });
     }
@@ -160,7 +198,7 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
 
     // Re-open the list and verify the note persisted on the exact-place textarea.
     await openSavedList(page, listName);
-    const verify = await findExactNoteInList(page, criteria);
+    const verify = await openPlaceNoteField(page, criteria);
     const success = Boolean(verify.best?.accepted && marker && verify.best.value.includes(marker));
     if (!success) {
       return await fallback('note not verified on exact place after write', {
@@ -181,6 +219,75 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
   } catch (error) {
     await saveFailureArtifacts(page, { label: 'attach-note', dir: config.failureDir, error });
     return await fallback(`exception: ${error.message}`);
+  } finally {
+    await context.close();
+  }
+}
+
+// Clear the note on the EXACT saved place (same saved-list targeting + nearest-
+// ancestor safety guard as attachNote). Returns the previous text so the caller
+// can undo. Never clears a sibling place's note.
+export async function clearNote(payload = {}, { config = loadConfig() } = {}) {
+  const { expectedName, expectedAddress = '', listName, negativeNames = [], threshold = 8 } = payload;
+  if (!config.profile) throw new Error('GOOGLE_MAPS_PROFILE not set');
+  if (!expectedName) throw new Error('clearNote requires expectedName');
+  if (!listName) throw new Error('clearNote requires listName (the place is opened via that saved list)');
+
+  const criteria = { expectedName, expectedAddress, targetList: listName, negativeNames, threshold };
+
+  let context;
+  try {
+    context = await chromium.launchPersistentContext(config.profile, {
+      headless: config.headless,
+      viewport: { width: 1400, height: 1100 },
+      locale: 'zh-TW',
+      args: ['--no-sandbox', '--disable-dev-shm-usage', '--lang=zh-TW', '--window-size=1400,1100'],
+    });
+  } catch (error) {
+    if (isMissingBrowserError(error)) {
+      throw new Error(`Playwright Chromium is not installed. Run: npx playwright install chromium\n(${error.message})`);
+    }
+    throw error;
+  }
+
+  let page = null;
+  try {
+    for (const p of context.pages()) await p.close().catch(() => {});
+    page = await context.newPage();
+    page.setDefaultTimeout(15000);
+
+    await openSavedList(page, listName);
+    const sel = await openPlaceNoteField(page, criteria);
+    if (!sel.best?.accepted) {
+      return { ok: false, noteStatus: 'not_found', reason: `exact-place note field not found in list "${listName}"`, listName };
+    }
+    const previousText = sel.best.value || '';
+    if (!previousText) {
+      return { ok: true, noteStatus: 'already_empty', previousText: '', listName };
+    }
+
+    const textarea = page.locator('textarea[aria-label="附註"]').nth(sel.best.i);
+    await textarea.click({ force: true });
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+    await page.keyboard.press('Delete');
+    await page.keyboard.press('Tab');
+    await page.waitForTimeout(2500);
+
+    // After clearing, an empty note collapses back to a 新增附註 button, so the
+    // open textarea disappearing (or being empty) both mean "cleared".
+    await openSavedList(page, listName);
+    const verify = await findExactNoteInList(page, criteria);
+    const cleared = !verify.best?.accepted || (verify.best.value || '') === '';
+    return {
+      ok: cleared,
+      noteStatus: cleared ? 'cleared' : 'clear_unverified',
+      previousText,
+      verifiedText: verify.best?.value ?? null,
+      listName,
+    };
+  } catch (error) {
+    await saveFailureArtifacts(page, { label: 'clear-note', dir: config.failureDir, error });
+    throw error;
   } finally {
     await context.close();
   }
