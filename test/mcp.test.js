@@ -8,7 +8,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const here = path.dirname(fileURLToPath(import.meta.url));
 const serverPath = path.join(here, '..', 'mcp', 'server.js');
 
-test('MCP server starts over stdio and lists all six tools', async () => {
+test('MCP server starts over stdio and lists all tools', async () => {
   const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath] });
   const client = new Client({ name: 'gmap-test', version: '0.0.0' });
   await client.connect(transport);
@@ -18,6 +18,7 @@ test('MCP server starts over stdio and lists all six tools', async () => {
     assert.deepEqual(names, [
       'attach_note',
       'benchmark_summary',
+      'clear_note',
       'list_regions',
       'resolve_place',
       'save_place',

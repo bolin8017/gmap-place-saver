@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolvePlace } from '../src/resolve/wrapper.js';
 import { savePlace } from '../src/maps/save.js';
-import { attachNote } from '../src/maps/note.js';
+import { attachNote, clearNote } from '../src/maps/note.js';
 import { appendBenchmark, benchmarkSummary } from '../src/storage/benchmark.js';
 import { listRegions } from '../src/index.js';
 
@@ -47,12 +47,19 @@ try {
       noteText: process.env.NOTE_TEXT || '',
       negativeNames: (process.env.NEGATIVE_NAMES || '').split(',').map((s) => s.trim()).filter(Boolean),
     }, { mode: process.env.NOTE_MODE || 'safeAttachOrSidecar' }));
+  } else if (cmd === 'clear-note') {
+    out(await clearNote({
+      expectedName: process.env.EXPECTED_NAME,
+      expectedAddress: process.env.EXPECTED_ADDRESS || '',
+      listName: process.env.LIST_NAME || '',
+      negativeNames: (process.env.NEGATIVE_NAMES || '').split(',').map((s) => s.trim()).filter(Boolean),
+    }, {}));
   } else if (cmd === 'regions') {
     out(await listRegions({}));
   } else if (cmd === 'benchmark') {
     out(await benchmarkSummary(Number(rest[0]) || 100, {}));
   } else {
-    console.error('Usage: gmap-place <resolve|save|attach|regions|benchmark> [args]');
+    console.error('Usage: gmap-place <resolve|save|attach|clear-note|regions|benchmark> [args]');
     process.exit(2);
   }
 } catch (error) {

@@ -16,15 +16,24 @@ if (!config.profile) {
 console.error(`Opening a browser with profile: ${config.profile}`);
 console.error('Sign in to your Google account and open Google Maps, then come back here.');
 
+// Headed launch uses $DISPLAY. On a headless server, provide one first via
+// scripts/login-server.sh (Xvfb + x11vnc + noVNC).
 const context = await chromium.launchPersistentContext(config.profile, {
   headless: false,
   viewport: { width: 1366, height: 900 },
   locale: 'zh-TW',
-  args: ['--no-sandbox', '--disable-dev-shm-usage', '--lang=zh-TW', '--window-size=1366,900'],
+  args: [
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-blink-features=AutomationControlled',
+    '--lang=zh-TW',
+    '--window-size=1366,900',
+  ],
 });
 
+const startUrl = process.env.START_URL || 'https://www.google.com/maps';
 const page = context.pages()[0] || await context.newPage();
-await page.goto('https://www.google.com/maps', { waitUntil: 'domcontentloaded' }).catch(() => {});
+await page.goto(startUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
 
 await new Promise((resolve) => {
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
