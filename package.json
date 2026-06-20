@@ -1,0 +1,58 @@
+{
+  "name": "gmap-place-saver",
+  "version": "0.1.0",
+  "description": "Resolve a place from a social/maps URL or text and save it to the correct regional Google Maps saved list. MCP server + CLI.",
+  "type": "module",
+  "license": "MIT",
+  "author": "louiskyee",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "google-maps",
+    "playwright",
+    "places",
+    "saved-lists",
+    "instagram",
+    "threads"
+  ],
+  "homepage": "https://github.com/bolin8017/gmap-place-saver#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bolin8017/gmap-place-saver.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bolin8017/gmap-place-saver/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "gmap-place": "bin/gmap-place.js",
+    "gmap-mcp": "mcp/server.js"
+  },
+  "files": [
+    "src",
+    "mcp",
+    "bin",
+    "scripts",
+    "config/region-lists.example.json",
+    ".env.example",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js && npm run check",
+    "check": "node --check src/resolve/social.js && node --check src/resolve/candidate.js && node --check src/resolve/wrapper.js && node --check src/maps/save.js && node --check src/maps/note.js && node --check src/recommendation.js && node --check src/storage/sidecar.js && node --check src/index.js && node --check src/smoke.js && node --check bin/gmap-place.js && node --check mcp/server.js && node --check scripts/login.js",
+    "smoke:resolve": "node bin/gmap-place.js resolve 'https://www.instagram.com/reel/DZvu5h9Tyqe/'",
+    "smoke:candidate": "PLACE_QUERY='彰化縣北斗鎮七星里民族路82號 小熊菓子 新北斗店' node src/resolve/candidate.js",
+    "benchmark": "node bin/gmap-place.js benchmark 100",
+    "login": "node scripts/login.js",
+    "mcp": "node mcp/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "p-retry": "^6.2.1",
+    "playwright": "1.60.0",
+    "zod": "^4.4.3"
+  }
+}
