@@ -119,18 +119,31 @@ claude mcp add gmap -- node /absolute/path/to/gmap-place-saver/mcp/server.js
 # then set GMAP_HOME and GOOGLE_MAPS_PROFILE in the server's environment
 ```
 
-**Generic MCP / Hermes** (`mcp_servers`):
+**Generic MCP / Hermes** (`mcp_servers`) — a real, working example:
 
 ```yaml
 mcp_servers:
   gmap:
-    command: "node"
-    args: ["/absolute/path/to/gmap-place-saver/mcp/server.js"]
+    # Use an ABSOLUTE node path. With nvm it is version-specific, e.g.
+    #   /home/<you>/.nvm/versions/node/v20.19.0/bin/node
+    command: /home/<you>/.nvm/versions/node/v20.19.0/bin/node
+    args:
+      - /path/to/gmap-place-saver/mcp/server.js
     env:
-      GMAP_HOME: "/absolute/path/to/gmap-place-saver"
-      GOOGLE_MAPS_PROFILE: "/absolute/path/to/google-maps-profile"
+      # GMAP_HOME is the data dir: caches, logs, sidecar, and the default
+      # config/region-lists.json resolve under it. Point it at an existing
+      # data dir to reuse your caches AND your real saved-list config.
+      GMAP_HOME: /path/to/your/gmap-data-dir
+      GOOGLE_MAPS_PROFILE: /path/to/google-maps-profile
+      # Optional: set explicitly if your region config lives elsewhere.
+      GMAP_REGION_CONFIG: /path/to/your/region-lists.json
     timeout: 180
+    connect_timeout: 60
 ```
+
+`PATH` and `HOME` are inherited automatically, so Playwright finds its browser
+cache and `yt-dlp` (if installed) works. After editing the config, reload without
+restarting the gateway by sending `/reload-mcp` in Hermes.
 
 ### Tools
 
