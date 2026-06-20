@@ -44,12 +44,11 @@ server.registerTool('save_place', {
 
 server.registerTool('attach_note', {
   title: 'Attach note',
-  description: 'Attach a source/recommendation note to the EXACT target place; if exact targeting is not provably safe, write a local sidecar record instead (mode safeAttachOrSidecar) or refuse.',
+  description: 'Attach a source/recommendation note to the EXACT saved place, opened via its saved list. If exact targeting is not provably safe (the note field cannot be matched to the place by nearest-ancestor name), write a local sidecar record instead (mode safeAttachOrSidecar) or refuse.',
   inputSchema: {
-    placeUrl: z.string().describe('Google Maps place URL to attach the note to'),
-    expectedName: z.string().describe('Expected place name; must match the page title'),
+    expectedName: z.string().describe('Expected place name; must appear on the saved place card in the list'),
+    listName: z.string().describe('The saved list the place is in; the note is opened through this list'),
     expectedAddress: z.string().optional(),
-    listName: z.string().optional(),
     sourceUrl: z.string().optional(),
     recommendationSummary: z.string().optional(),
     noteText: z.string().optional().describe('Explicit note text override'),

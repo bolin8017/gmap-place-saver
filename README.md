@@ -161,7 +161,7 @@ restarting the gateway by sending `/reload-mcp` in Hermes.
 ```bash
 gmap-place resolve '<instagram/maps url | place text>'
 PLACE_QUERY='…' LIST_NAME='Taipei' EXPECTED_NAME='…' DRY_RUN=1 gmap-place save
-PLACE_URL='…' EXPECTED_NAME='…' SOURCE_URL='…' RECOMMENDATION='…' gmap-place attach
+EXPECTED_NAME='…' LIST_NAME='彰化' SOURCE_URL='…' RECOMMENDATION='…' gmap-place attach
 gmap-place regions
 gmap-place benchmark 100
 ```

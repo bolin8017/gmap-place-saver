@@ -39,7 +39,6 @@ try {
     out(result);
   } else if (cmd === 'attach') {
     out(await attachNote({
-      placeUrl: process.env.PLACE_URL,
       expectedName: process.env.EXPECTED_NAME,
       expectedAddress: process.env.EXPECTED_ADDRESS || '',
       listName: process.env.LIST_NAME || '',
