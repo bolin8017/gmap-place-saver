@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { loadConfig } from '../config.js';
 import { runWithRetry, saveFailureArtifacts } from '../run-utils.js';
-import { loadRegionEntries, mapsSearchUrl } from './social.js';
+import { loadRegionEntries, mapsSearchUrl, matchTargetLists } from './social.js';
 import { appendBenchmark } from '../storage/benchmark.js';
 
 const SAVE_BUTTON_SELECTORS = [
@@ -89,12 +89,15 @@ async function getBody(page) {
   return await page.locator('body').innerText({ timeout: 15000 }).catch(() => '');
 }
 
-function inferTargetList(regionLists, address, bodyText) {
-  const haystack = `${address}\n${bodyText}`;
-  for (const [listName, pattern] of regionLists) {
-    if (pattern.test(haystack)) return listName;
-  }
-  return '';
+// The extracted address is precise; the whole body text also contains nearby
+// places, other lists, etc. Route by the address when it matches anything, and
+// fall back to the body only when it doesn't. Zero or several matches return
+// '' so the caller must confirm — never a silent first-match pick.
+export function inferTargetListFromPage(regionEntries, address, bodyText) {
+  const addressMatches = matchTargetLists(regionEntries, address);
+  if (addressMatches.length) return addressMatches.length === 1 ? addressMatches[0] : '';
+  const bodyMatches = matchTargetLists(regionEntries, bodyText);
+  return bodyMatches.length === 1 ? bodyMatches[0] : '';
 }
 
 async function extractAddress(page, bodyText) {
@@ -168,7 +171,6 @@ export async function resolveCandidate({ query = '', placeUrl = '', sourceUrl = 
   const mark = (phase) => marks.push({ phase, ms: elapsedMs() });
 
   const regionEntries = await loadRegionEntries(config);
-  const regionLists = regionEntries.map((e) => [e.listName, e.pattern]);
 
   const cacheKey = canonicalizeCacheKey(sourceUrl || placeUrl || placeQuery);
   if (useCache && cacheKey) {
@@ -234,7 +236,7 @@ export async function resolveCandidate({ query = '', placeUrl = '', sourceUrl = 
     const address = await extractAddress(page, bodyText);
     const currentUrl = page.url();
     const mapsUrl = currentUrl.includes('/maps/place') ? currentUrl : mapsSearchUrl(address ? `${title} ${address}` : placeQuery);
-    const targetList = inferTargetList(regionLists, address, bodyText);
+    const targetList = inferTargetListFromPage(regionEntries, address, bodyText);
     const signInVisible = await page.locator('a:has-text("Sign in"), button:has-text("Sign in"), a:has-text("登入"), button:has-text("登入")').first().isVisible({ timeout: 2000 }).catch(() => false);
 
     const confidence = title && address ? 'high' : (title && !isGenericTitle(title) ? 'medium' : 'low');

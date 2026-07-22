@@ -173,11 +173,16 @@ function escapeRegex(text) {
 
 export async function loadRegionEntries(config = loadConfig()) {
   const data = JSON.parse(await fs.readFile(config.regionConfig, 'utf8'));
-  return Object.entries(data).map(([listName, keywords]) => ({
-    listName,
-    keywords,
-    pattern: new RegExp(keywords.map(escapeRegex).join('|')),
-  }));
+  return Object.entries(data).map(([listName, keywords]) => {
+    const usable = (Array.isArray(keywords) ? keywords : []).map((k) => String(k).trim()).filter(Boolean);
+    return {
+      listName,
+      keywords: usable,
+      // No usable keywords -> the list can never match. An empty alternation
+      // regex would match EVERY address and capture all routing.
+      pattern: usable.length ? new RegExp(usable.map(escapeRegex).join('|')) : null,
+    };
+  });
 }
 
 function inferRegion(regionEntries, address) {
@@ -188,9 +193,15 @@ function inferRegion(regionEntries, address) {
   return '';
 }
 
+export function matchTargetLists(regionEntries, text) {
+  return regionEntries.filter((entry) => entry.pattern?.test(text)).map((entry) => entry.listName);
+}
+
+// Exactly one matching list routes; zero or several return '' so the caller
+// must confirm instead of silently picking whichever list comes first.
 export function inferTargetList(regionEntries, region, address) {
-  const text = `${region}\n${address}`;
-  return regionEntries.find((entry) => entry.pattern.test(text))?.listName || '';
+  const matches = matchTargetLists(regionEntries, `${region}\n${address}`);
+  return matches.length === 1 ? matches[0] : '';
 }
 
 export function makeMapsQuery(placeName, address, caption) {
@@ -286,7 +297,8 @@ export async function resolveSocial(sourceUrl, {
   const address = extractAddress(caption);
   const placeName = extractPlaceName(caption, address);
   const region = inferRegion(regionEntries, address);
-  const targetList = inferTargetList(regionEntries, region, address);
+  const targetListCandidates = matchTargetLists(regionEntries, `${region}\n${address}`);
+  const targetList = targetListCandidates.length === 1 ? targetListCandidates[0] : '';
   const mapsQuery = makeMapsQuery(placeName, address, caption);
 
   const result = {
@@ -298,6 +310,7 @@ export async function resolveSocial(sourceUrl, {
     address,
     region,
     targetList,
+    targetListCandidates,
     mapsQuery,
     mapsUrl: mapsSearchUrl(mapsQuery),
     captionSnippet: caption.slice(0, 900),
