@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { loadConfig } from '../config.js';
 import { appendBenchmark } from '../storage/benchmark.js';
+import { writeJsonAtomic } from '../storage/json-file.js';
 
 function decodeHtml(text) {
   return (text || '')
@@ -236,8 +237,7 @@ async function readJson(file, fallback) {
 }
 
 async function writeJson(file, value) {
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
+  await writeJsonAtomic(file, value);
 }
 
 export async function resolveSocial(sourceUrl, {
