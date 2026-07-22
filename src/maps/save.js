@@ -69,6 +69,18 @@ function isMissingBrowserError(error) {
   return /Executable doesn'?t exist|playwright install|please run the following command/i.test(error?.message || '');
 }
 
+// An empty expectedName must fail explicitly: body.includes('') is always
+// true, which would silently disable the confirmation check for URL-only saves.
+export function placeFound(body, expectedName, expectedAddress = '') {
+  if (!expectedName) return false;
+  return body.includes(expectedName) && (!expectedAddress || body.includes(expectedAddress));
+}
+
+// listSelected must be the VERIFIED aria-checked state, never the click attempt.
+export function assessSaveSuccess({ placeFoundLikely, saveClicked, listSelected, signInVisible }) {
+  return Boolean(placeFoundLikely && saveClicked && listSelected && !signInVisible);
+}
+
 export async function savePlace({
   placeUrl = '',
   placeQuery = '',
@@ -142,7 +154,7 @@ export async function savePlace({
     const title = await page.title().catch(() => '');
     const currentUrl = page.url();
     const bodyAfterSearch = await getBody(page);
-    const placeFoundLikely = bodyAfterSearch.includes(expectedName) && (!expectedAddress || bodyAfterSearch.includes(expectedAddress));
+    const placeFoundLikely = placeFound(bodyAfterSearch, expectedName, expectedAddress);
 
     if (dryRun) {
       return {
@@ -191,6 +203,7 @@ export async function savePlace({
 
     let listClicked = false;
     let listAlreadySelected = false;
+    let listSelected = false;
     const listRowSelectors = [
       `div[role="menuitemradio"]:has-text("${listName}")`,
       `div[role="menuitemcheckbox"]:has-text("${listName}")`,
@@ -202,14 +215,15 @@ export async function savePlace({
       if (ariaCheckedBefore === 'true') {
         listAlreadySelected = true;
         listClicked = true;
+        listSelected = true;
         console.error(`list already selected: ${listName}`);
       } else {
         await clickableListRow.click({ timeout: 8000, force: true });
         await sleep(700);
         const ariaCheckedAfter = await clickableListRow.getAttribute('aria-checked').catch(() => null);
         listClicked = true;
-        listAlreadySelected = ariaCheckedAfter === 'true';
-        console.error(`clicked save-dialog list row: ${listName}`);
+        listSelected = ariaCheckedAfter === 'true';
+        console.error(`clicked save-dialog list row: ${listName} (aria-checked=${ariaCheckedAfter})`);
       }
     }
     mark('list-selection-attempted');
@@ -245,6 +259,7 @@ export async function savePlace({
       placeFoundLikely,
       saveClicked: Boolean(saveClicked),
       listClicked,
+      listSelected,
       listAlreadySelected,
       doneClicked: Boolean(doneClicked),
       finalTitle,
@@ -252,7 +267,7 @@ export async function savePlace({
       signInVisible,
       savedIndicator,
       listNameVisible,
-      successLikely: placeFoundLikely && Boolean(saveClicked) && (listClicked || listNameVisible) && !signInVisible,
+      successLikely: assessSaveSuccess({ placeFoundLikely, saveClicked: Boolean(saveClicked), listSelected, signInVisible }),
       elapsedMs: elapsedMs(),
       phaseMarks: marks,
       privacySafeSnippet: (() => {
