@@ -3,8 +3,11 @@ import path from 'node:path';
 import { loadConfig } from '../config.js';
 
 export function sidecarFileFor(createdAt, { config = loadConfig() } = {}) {
-  const month = String(createdAt).slice(0, 7); // YYYY-MM
-  return path.join(config.sidecarDir, `${month}.jsonl`);
+  // Normalize before slicing: a non-ISO createdAt like '2026/06/21' would
+  // otherwise slice to '2026/06' and write into an unintended subdirectory.
+  const parsed = new Date(createdAt);
+  const iso = Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+  return path.join(config.sidecarDir, `${iso.slice(0, 7)}.jsonl`); // YYYY-MM
 }
 
 export async function writeSidecar(record, { config = loadConfig() } = {}) {

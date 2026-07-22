@@ -40,6 +40,12 @@ test('mapsSearchUrl returns empty string for empty query', () => {
   assert.equal(mapsSearchUrl(''), '');
 });
 
+test('makeMapsQuery returns empty when neither name nor address is known', () => {
+  // A random caption line like 超好吃 would drive a Maps search to an
+  // unrelated place; low-confidence resolutions must ship no query at all.
+  assert.equal(makeMapsQuery('', '', '超好吃\n今天去了一家店\n#美食'), '');
+});
+
 test('ytDlpCommands separates the URL from options with --', () => {
   // Without the separator, a crafted "URL" like --exec=… is parsed by yt-dlp
   // as an option; --exec runs a shell command.

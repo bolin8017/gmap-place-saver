@@ -210,12 +210,12 @@ export function inferTargetList(regionEntries, region, address) {
   return matches.length === 1 ? matches[0] : '';
 }
 
-export function makeMapsQuery(placeName, address, caption) {
+// No name and no address means no query: a random caption line (超好吃…)
+// would drive a Maps search to an unrelated place, and low-confidence
+// resolutions already force the browser-snapshot path anyway.
+export function makeMapsQuery(placeName, address) {
   if (placeName && address) return `${address} ${placeName}`;
-  if (address) return address;
-  if (placeName) return placeName;
-  const firstUseful = normalize(caption).split('\n').map(stripSocialNoise).find((line) => line.length >= 2 && line.length <= 50) || '';
-  return firstUseful;
+  return address || placeName || '';
 }
 
 export function mapsSearchUrl(query) {
@@ -304,7 +304,7 @@ export async function resolveSocial(sourceUrl, {
   const region = inferRegion(regionEntries, address);
   const targetListCandidates = matchTargetLists(regionEntries, `${region}\n${address}`);
   const targetList = targetListCandidates.length === 1 ? targetListCandidates[0] : '';
-  const mapsQuery = makeMapsQuery(placeName, address, caption);
+  const mapsQuery = makeMapsQuery(placeName, address);
 
   const result = {
     sourceUrl,

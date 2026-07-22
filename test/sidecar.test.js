@@ -12,6 +12,13 @@ test('sidecarFileFor derives the YYYY-MM file from createdAt', () => {
   );
 });
 
+test('sidecarFileFor never writes outside sidecarDir for non-ISO createdAt', () => {
+  // A raw slice of '2026/06/21' is '2026/06' — an unintended subdirectory.
+  const file = sidecarFileFor('2026/06/21', { config: { sidecarDir: '/s' } });
+  assert.equal(path.dirname(file), '/s');
+  assert.match(path.basename(file), /^2026-06\.jsonl$/);
+});
+
 test('writeSidecar appends a record to the month jsonl file', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gmap-sidecar-'));
   try {
