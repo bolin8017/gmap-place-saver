@@ -9,6 +9,7 @@ export async function smokeCheck({ config = loadConfig() } = {}) {
     profilePath: config.profile || null,
     profilePathExists: false,
     playwrightAvailable: false,
+    browserReady: false,
     regionConfig: config.regionConfig,
     regionConfigReadable: false,
     regionCount: 0,
@@ -30,6 +31,10 @@ export async function smokeCheck({ config = loadConfig() } = {}) {
     result.regionCount = Object.keys(data).length;
   } catch { /* missing/unreadable */ }
 
-  result.ok = result.regionConfigReadable;
+  // ok must reflect everything the tool advertises checking: a green smoke
+  // check with no usable browser profile just defers the failure to the first
+  // save/attach.
+  result.browserReady = result.playwrightAvailable && result.profilePathExists;
+  result.ok = result.regionConfigReadable && result.browserReady;
   return result;
 }

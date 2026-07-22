@@ -27,14 +27,36 @@ export function verificationMarker({ sourceUrl = '', recommendationSummary = '',
   return '';
 }
 
-async function clickFirstVisible(page, selectors, timeout = 8000) {
+// Decide what to do with the note field's current content BEFORE typing.
+// Ctrl+A + type replaces the whole field, so a non-empty existing note is
+// only overwritten when the caller explicitly opts in; previousText is always
+// surfaced so the change can be undone.
+export function planNoteWrite({ existingText = '', overwrite = false } = {}) {
+  const previousText = existingText || '';
+  if (previousText && !overwrite) return { action: 'preserve', previousText };
+  return { action: 'write', previousText };
+}
+
+// The textarea may re-wrap whitespace, so compare with both sides normalized —
+// a raw includes() false-negative writes a duplicate sidecar for a note that
+// actually attached.
+export function noteVerified(value, marker) {
+  if (!marker) return false;
+  const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+  return norm(value).includes(norm(marker));
+}
+
+// Targets may be selector strings or Locator objects. Returns a target only
+// when its click actually succeeded — a swallowed click error must not let the
+// caller proceed against a panel that never opened.
+async function clickFirstVisible(page, targets, timeout = 8000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    for (const selector of selectors) {
-      const loc = page.locator(selector).first();
+    for (const target of targets) {
+      const loc = typeof target === 'string' ? page.locator(target).first() : target;
       if (await loc.isVisible({ timeout: 400 }).catch(() => false)) {
-        await loc.click({ force: true, timeout: 5000 }).catch(() => {});
-        return selector;
+        const clicked = await loc.click({ force: true, timeout: 5000 }).then(() => true).catch(() => false);
+        if (clicked) return typeof target === 'string' ? target : 'exact-locator';
       }
     }
     await page.waitForTimeout(300);
@@ -56,7 +78,14 @@ export async function openSavedList(page, listName) {
     'button:has-text("Saved")',
   ], 10000);
   await page.waitForTimeout(1500);
+  // Exact-text locators first: has-text() is a substring match, so 「彰化」
+  // would also open 「彰化市」 and the note could land in the wrong list.
+  // Locator objects also survive quotes in listName that break selector
+  // strings. Substring selectors remain only as a last-resort fallback.
   await clickFirstVisible(page, [
+    page.getByRole('button', { name: listName, exact: true }).first(),
+    page.getByRole('link', { name: listName, exact: true }).first(),
+    page.getByText(listName, { exact: true }).first(),
     `button:has-text("${listName}")`,
     `a:has-text("${listName}")`,
     `div[role="button"]:has-text("${listName}")`,
@@ -131,6 +160,7 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
     noteText: noteOverride = '',
     negativeNames = [],
     threshold = 8,
+    overwrite = false,
   } = payload;
 
   if (!config.profile) throw new Error('GOOGLE_MAPS_PROFILE not set');
@@ -189,6 +219,13 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
       });
     }
 
+    const plan = planNoteWrite({ existingText: sel.best.value, overwrite });
+    if (plan.action === 'preserve') {
+      return await fallback('existing note present (pass overwrite=true to replace it)', {
+        previousText: plan.previousText,
+      });
+    }
+
     const textarea = page.locator('textarea[aria-label="附註"]').nth(sel.best.i);
     await textarea.click({ force: true });
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
@@ -199,11 +236,12 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
     // Re-open the list and verify the note persisted on the exact-place textarea.
     await openSavedList(page, listName);
     const verify = await openPlaceNoteField(page, criteria);
-    const success = Boolean(verify.best?.accepted && marker && verify.best.value.includes(marker));
+    const success = Boolean(verify.best?.accepted && noteVerified(verify.best.value, marker));
     if (!success) {
       return await fallback('note not verified on exact place after write', {
         selectedScore: sel.best.score,
         verifyScore: verify.best?.score ?? null,
+        previousText: plan.previousText,
       });
     }
 
@@ -213,6 +251,7 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
       exactPlaceConfirmed: true,
       selectedTextareaScore: sel.best.score,
       verifiedText: verify.best.value,
+      previousText: plan.previousText,
       listName,
       url: page.url(),
     };
@@ -303,6 +342,7 @@ if (isMain) {
     recommendationSummary: process.env.RECOMMENDATION || '',
     noteText: process.env.NOTE_TEXT || '',
     negativeNames: (process.env.NEGATIVE_NAMES || '').split(',').map((s) => s.trim()).filter(Boolean),
+    overwrite: process.env.OVERWRITE_NOTE === '1',
   }, { mode: process.env.NOTE_MODE || 'safeAttachOrSidecar' })
     .then((r) => console.log(JSON.stringify(r, null, 2)))
     .catch((e) => { console.error(e.message); process.exit(1); });

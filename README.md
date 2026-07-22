@@ -59,18 +59,22 @@ headlessly. No Google credentials are ever passed to or stored by this tool.
 display and exposes it in your browser:
 
 ```bash
-sudo apt-get install -y xvfb x11vnc novnc websockify   # one-time prereqs
+sudo apt-get install -y xvfb x11vnc novnc websockify xauth   # one-time prereqs
 GOOGLE_MAPS_PROFILE=/path/to/google-maps-profile ./scripts/login-server.sh
 ```
 
-It prints a `127.0.0.1:6080` noVNC URL (tunnel it over SSH), where you sign in;
-then press Enter in the terminal to save and shut everything down. Tool paths are
-overridable via env (`X11VNC`, `NOVNC_PROXY`, `NODE_BIN`, `DISPLAY_NUM`, ports).
+It prints a `127.0.0.1:6080` noVNC URL (tunnel it over SSH) and a one-time VNC
+password; connect, enter the password, sign in, then press Enter in the terminal
+to save and shut everything down. The display is xauth-protected and the VNC
+server password-protected, so other local users on a shared server cannot watch
+the login. Tool paths are overridable via env (`XVFB`, `X11VNC`, `NOVNC_PROXY`,
+`NODE_BIN`, `DISPLAY_NUM`, ports).
 
 ## Configuration
 
 All paths and tuning come from environment variables (see `.env.example`). Nothing
-is hardcoded.
+is hardcoded. A `.env` file at the package root is loaded automatically;
+variables already set in the real environment take precedence.
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -82,6 +86,8 @@ is hardcoded.
 | `GMAP_FAILURE_DIR` | Failure artifacts (screenshots etc.) | `$GMAP_HOME/logs/failures` |
 | `GMAP_SIDECAR_DIR` | Local note sidecar records | `$GMAP_HOME/data/sidecar-notes` |
 | `GMAP_RETRIES` / `GMAP_RETRY_MIN_TIMEOUT_MS` | Navigation retry tuning | `2` / `750` |
+| `HEADLESS` | `0` runs the browser headed (e.g. to debug a save) | headless |
+| `GMAP_FAST_SOCIAL` | `0` disables the high-confidence social fast path | enabled |
 | `YTDLP_COOKIES_FROM_BROWSER` | Let yt-dlp reuse browser cookies for captions | unset |
 
 ### Region config
@@ -187,6 +193,9 @@ gmap-place benchmark 100
 - A note is attached only when the page title **and** the note field's nearest
   ancestors both confirm the exact place; otherwise it is written to a local
   sidecar JSONL record or refused.
+- An existing note is never replaced unless `overwrite` is explicitly set
+  (CLI: `OVERWRITE_NOTE=1`); without it the new note goes to the sidecar and
+  the existing text is returned as `previousText`.
 - No Google credentials are requested or stored; a persistent profile is used.
 - Tool output is compact JSON with privacy-safe snippets only.
 - Chromium is launched with `--no-sandbox` (required in containers/root

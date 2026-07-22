@@ -19,8 +19,13 @@ function percentile(values, p) {
 }
 
 export async function benchmarkSummary(limit = 100, { config = loadConfig() } = {}) {
-  const text = await fs.readFile(config.benchmarkLog, 'utf8');
-  const rows = text.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  // Missing log (fresh install) means zero rows, not a crash; a corrupt line
+  // (interrupted append) drops that line, not the whole summary.
+  let text = '';
+  try { text = await fs.readFile(config.benchmarkLog, 'utf8'); } catch { /* no log yet */ }
+  const rows = text.trim().split('\n').filter(Boolean).flatMap((line) => {
+    try { return [JSON.parse(line)]; } catch { return []; }
+  });
   const recent = rows.slice(-limit);
   const byKind = {};
   for (const row of recent) {
