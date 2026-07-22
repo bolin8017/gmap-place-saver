@@ -3,7 +3,6 @@ cache/
 logs/
 data/
 .env
-*.png
 # real (private) region config — only the .example is committed
 config/region-lists.json
 # browser profiles if ever placed inside the repo

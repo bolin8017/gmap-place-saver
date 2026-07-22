@@ -75,7 +75,7 @@ is hardcoded.
 | Variable | Purpose | Default |
 |---|---|---|
 | `GOOGLE_MAPS_PROFILE` | Persistent Chromium profile (required for browser ops) | — |
-| `GMAP_HOME` | Base dir for runtime data | the package dir |
+| `GMAP_HOME` | Base dir for runtime data (set it explicitly for global/read-only installs — the default writes inside the package dir) | the package dir |
 | `GMAP_REGION_CONFIG` | Region → list mapping JSON | `$GMAP_HOME/config/region-lists.json` |
 | `GMAP_CACHE` / `GMAP_SOCIAL_CACHE` | Candidate / social caches | under `$GMAP_HOME/cache` |
 | `GMAP_BENCHMARK_LOG` | Benchmark JSONL | `$GMAP_HOME/logs/gmap-benchmark.jsonl` |
@@ -189,6 +189,9 @@ gmap-place benchmark 100
   sidecar JSONL record or refused.
 - No Google credentials are requested or stored; a persistent profile is used.
 - Tool output is compact JSON with privacy-safe snippets only.
+- Chromium is launched with `--no-sandbox` (required in containers/root
+  environments); run as a regular user if the reduced browser isolation
+  concerns you.
 
 ## Development
 

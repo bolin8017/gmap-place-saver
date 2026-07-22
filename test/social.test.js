@@ -38,3 +38,9 @@ test('makeMapsQuery combines address and name; mapsSearchUrl encodes it', () => 
 test('mapsSearchUrl returns empty string for empty query', () => {
   assert.equal(mapsSearchUrl(''), '');
 });
+
+test('makeMapsQuery returns empty when neither name nor address is known', () => {
+  // A random caption line like 超好吃 would drive a Maps search to an
+  // unrelated place; low-confidence resolutions must ship no query at all.
+  assert.equal(makeMapsQuery('', '', '超好吃\n今天去了一家店\n#美食'), '');
+});
