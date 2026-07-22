@@ -42,7 +42,7 @@
   ],
   "scripts": {
     "test": "node --test test/*.test.js && npm run check",
-    "check": "node --check src/resolve/social.js && node --check src/resolve/candidate.js && node --check src/resolve/wrapper.js && node --check src/maps/save.js && node --check src/maps/note.js && node --check src/recommendation.js && node --check src/storage/sidecar.js && node --check src/index.js && node --check src/smoke.js && node --check bin/gmap-place.js && node --check mcp/server.js && node --check scripts/login.js",
+    "check": "node --check src/resolve/social.js && node --check src/resolve/candidate.js && node --check src/resolve/wrapper.js && node --check src/maps/save.js && node --check src/maps/note.js && node --check src/recommendation.js && node --check src/storage/sidecar.js && node --check src/index.js && node --check src/smoke.js && node --check bin/gmap-place.js && node --check mcp/server.js && node --check scripts/login.js && bash -n scripts/login-server.sh",
     "smoke:resolve": "node bin/gmap-place.js resolve 'https://www.instagram.com/reel/DZvu5h9Tyqe/'",
     "smoke:candidate": "PLACE_QUERY='彰化縣北斗鎮七星里民族路82號 小熊菓子 新北斗店' node src/resolve/candidate.js",
     "benchmark": "node bin/gmap-place.js benchmark 100",
