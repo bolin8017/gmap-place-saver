@@ -73,7 +73,8 @@ the login. Tool paths are overridable via env (`XVFB`, `X11VNC`, `NOVNC_PROXY`,
 ## Configuration
 
 All paths and tuning come from environment variables (see `.env.example`). Nothing
-is hardcoded.
+is hardcoded. A `.env` file at the package root is loaded automatically;
+variables already set in the real environment take precedence.
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -85,6 +86,8 @@ is hardcoded.
 | `GMAP_FAILURE_DIR` | Failure artifacts (screenshots etc.) | `$GMAP_HOME/logs/failures` |
 | `GMAP_SIDECAR_DIR` | Local note sidecar records | `$GMAP_HOME/data/sidecar-notes` |
 | `GMAP_RETRIES` / `GMAP_RETRY_MIN_TIMEOUT_MS` | Navigation retry tuning | `2` / `750` |
+| `HEADLESS` | `0` runs the browser headed (e.g. to debug a save) | headless |
+| `GMAP_FAST_SOCIAL` | `0` disables the high-confidence social fast path | enabled |
 | `YTDLP_COOKIES_FROM_BROWSER` | Let yt-dlp reuse browser cookies for captions | unset |
 
 ### Region config
