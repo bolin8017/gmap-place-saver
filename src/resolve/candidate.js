@@ -6,6 +6,7 @@ import { loadConfig } from '../config.js';
 import { runWithRetry, saveFailureArtifacts } from '../run-utils.js';
 import { loadRegionEntries, mapsSearchUrl, matchTargetLists } from './social.js';
 import { appendBenchmark } from '../storage/benchmark.js';
+import { writeJsonAtomic } from '../storage/json-file.js';
 
 const SAVE_BUTTON_SELECTORS = [
   'button[aria-label^="儲存"]',
@@ -147,8 +148,7 @@ async function readCache(cachePath) {
 }
 
 async function saveCache(cachePath, cache) {
-  await fs.mkdir(path.dirname(cachePath), { recursive: true });
-  await fs.writeFile(cachePath, `${JSON.stringify(cache, null, 2)}\n`);
+  await writeJsonAtomic(cachePath, cache);
 }
 
 function isMissingBrowserError(error) {
