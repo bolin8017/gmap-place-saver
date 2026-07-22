@@ -187,6 +187,9 @@ gmap-place benchmark 100
 - A note is attached only when the page title **and** the note field's nearest
   ancestors both confirm the exact place; otherwise it is written to a local
   sidecar JSONL record or refused.
+- An existing note is never replaced unless `overwrite` is explicitly set
+  (CLI: `OVERWRITE_NOTE=1`); without it the new note goes to the sidecar and
+  the existing text is returned as `previousText`.
 - No Google credentials are requested or stored; a persistent profile is used.
 - Tool output is compact JSON with privacy-safe snippets only.
 
