@@ -50,7 +50,7 @@ server.registerTool('save_place', {
 
 server.registerTool('attach_note', {
   title: 'Attach note',
-  description: 'Attach a source/recommendation note to the EXACT saved place, opened via its saved list. If exact targeting is not provably safe (the note field cannot be matched to the place by nearest-ancestor name), write a local sidecar record instead (mode safeAttachOrSidecar) or refuse.',
+  description: 'Attach a source/recommendation note to the EXACT saved place, opened via its saved list. If exact targeting is not provably safe (the note field cannot be matched to the place by nearest-ancestor name), write a local sidecar record instead (mode safeAttachOrSidecar) or refuse. A non-empty existing note is never replaced unless overwrite is true; previousText is always returned.',
   inputSchema: {
     expectedName: z.string().describe('Expected place name; must appear on the saved place card in the list'),
     listName: z.string().describe('The saved list the place is in; the note is opened through this list'),
@@ -59,6 +59,7 @@ server.registerTool('attach_note', {
     recommendationSummary: z.string().optional(),
     noteText: z.string().optional().describe('Explicit note text override'),
     negativeNames: z.array(z.string()).optional(),
+    overwrite: z.boolean().optional().describe('Replace a non-empty existing note (default false: preserved, new note goes to sidecar/refused)'),
     mode: z.enum(['safeAttachOrSidecar', 'attachOnly']).optional(),
   },
 }, async ({ mode, ...payload }) => run(() => attachNote(payload, { mode })));
