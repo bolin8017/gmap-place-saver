@@ -308,10 +308,11 @@ export async function resolveSocial(sourceUrl, {
     resolvedAt: new Date().toISOString(),
   };
 
-  if (writeCache) {
+  // Cache only useful resolutions (mirrors resolveCandidate's hasUsefulCandidate
+  // guard): a transient fetch/yt-dlp failure must not poison the cache forever.
+  if (writeCache && (result.placeName || result.address)) {
     const cache = await readJson(config.socialCache, {});
     cache[key] = result;
-    if (key !== sourceUrl.trim()) cache[sourceUrl.trim()] = result;
     await writeJson(config.socialCache, cache);
   }
 
