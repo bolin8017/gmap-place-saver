@@ -74,16 +74,21 @@ async function fetchHtml(url) {
   }
 }
 
-function runYtDlp(url, config) {
+export function ytDlpCommands(url, config) {
   const baseArgs = ['--dump-json', '--skip-download', '--no-warnings'];
   const cookieArgs = config.ytdlpCookiesFromBrowser
     ? ['--cookies-from-browser', config.ytdlpCookiesFromBrowser]
     : [];
-  const candidates = [
-    ['yt-dlp', [...baseArgs, ...cookieArgs, url]],
-    ['uvx', ['--from', 'yt-dlp', 'yt-dlp', ...baseArgs, ...cookieArgs, url]],
+  // '--' keeps a crafted "URL" (e.g. --exec=…) positional instead of letting
+  // yt-dlp parse it as an option.
+  return [
+    ['yt-dlp', [...baseArgs, ...cookieArgs, '--', url]],
+    ['uvx', ['--from', 'yt-dlp', 'yt-dlp', ...baseArgs, ...cookieArgs, '--', url]],
   ];
-  for (const [cmd, args] of candidates) {
+}
+
+function runYtDlp(url, config) {
+  for (const [cmd, args] of ytDlpCommands(url, config)) {
     const result = spawnSync(cmd, args, { encoding: 'utf8', timeout: 25000, maxBuffer: 4 * 1024 * 1024 });
     if (result.status === 0 && result.stdout.trim()) {
       try { return { command: cmd, data: JSON.parse(result.stdout) }; } catch {}
@@ -174,11 +179,16 @@ function escapeRegex(text) {
 
 export async function loadRegionEntries(config = loadConfig()) {
   const data = JSON.parse(await fs.readFile(config.regionConfig, 'utf8'));
-  return Object.entries(data).map(([listName, keywords]) => ({
-    listName,
-    keywords,
-    pattern: new RegExp(keywords.map(escapeRegex).join('|')),
-  }));
+  return Object.entries(data).map(([listName, keywords]) => {
+    const usable = (Array.isArray(keywords) ? keywords : []).map((k) => String(k).trim()).filter(Boolean);
+    return {
+      listName,
+      keywords: usable,
+      // No usable keywords -> the list can never match. An empty alternation
+      // regex would match EVERY address and capture all routing.
+      pattern: usable.length ? new RegExp(usable.map(escapeRegex).join('|')) : null,
+    };
+  });
 }
 
 function inferRegion(regionEntries, address) {
@@ -189,9 +199,15 @@ function inferRegion(regionEntries, address) {
   return '';
 }
 
+export function matchTargetLists(regionEntries, text) {
+  return regionEntries.filter((entry) => entry.pattern?.test(text)).map((entry) => entry.listName);
+}
+
+// Exactly one matching list routes; zero or several return '' so the caller
+// must confirm instead of silently picking whichever list comes first.
 export function inferTargetList(regionEntries, region, address) {
-  const text = `${region}\n${address}`;
-  return regionEntries.find((entry) => entry.pattern.test(text))?.listName || '';
+  const matches = matchTargetLists(regionEntries, `${region}\n${address}`);
+  return matches.length === 1 ? matches[0] : '';
 }
 
 export function makeMapsQuery(placeName, address, caption) {
@@ -286,7 +302,8 @@ export async function resolveSocial(sourceUrl, {
   const address = extractAddress(caption);
   const placeName = extractPlaceName(caption, address);
   const region = inferRegion(regionEntries, address);
-  const targetList = inferTargetList(regionEntries, region, address);
+  const targetListCandidates = matchTargetLists(regionEntries, `${region}\n${address}`);
+  const targetList = targetListCandidates.length === 1 ? targetListCandidates[0] : '';
   const mapsQuery = makeMapsQuery(placeName, address, caption);
 
   const result = {
@@ -298,6 +315,7 @@ export async function resolveSocial(sourceUrl, {
     address,
     region,
     targetList,
+    targetListCandidates,
     mapsQuery,
     mapsUrl: mapsSearchUrl(mapsQuery),
     captionSnippet: caption.slice(0, 900),
@@ -308,10 +326,11 @@ export async function resolveSocial(sourceUrl, {
     resolvedAt: new Date().toISOString(),
   };
 
-  if (writeCache) {
+  // Cache only useful resolutions (mirrors resolveCandidate's hasUsefulCandidate
+  // guard): a transient fetch/yt-dlp failure must not poison the cache forever.
+  if (writeCache && (result.placeName || result.address)) {
     const cache = await readJson(config.socialCache, {});
     cache[key] = result;
-    if (key !== sourceUrl.trim()) cache[sourceUrl.trim()] = result;
     await writeJson(config.socialCache, cache);
   }
 
