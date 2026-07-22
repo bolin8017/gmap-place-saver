@@ -4,9 +4,11 @@ import { savePlace } from '../src/maps/save.js';
 import { attachNote, clearNote } from '../src/maps/note.js';
 import { appendBenchmark, benchmarkSummary } from '../src/storage/benchmark.js';
 import { listRegions } from '../src/index.js';
+import { actionFailed } from '../src/run-utils.js';
 
 const [cmd, ...rest] = process.argv.slice(2);
 const out = (v) => console.log(JSON.stringify(v, null, 2));
+const exitOnFailure = (result) => { if (actionFailed(result)) process.exit(1); };
 
 try {
   if (cmd === 'resolve') {
@@ -37,8 +39,9 @@ try {
       elapsedMs: result.elapsedMs, at: new Date().toISOString(),
     }, {});
     out(result);
+    exitOnFailure(result);
   } else if (cmd === 'attach') {
-    out(await attachNote({
+    const result = await attachNote({
       expectedName: process.env.EXPECTED_NAME,
       expectedAddress: process.env.EXPECTED_ADDRESS || '',
       listName: process.env.LIST_NAME || '',
@@ -47,14 +50,18 @@ try {
       noteText: process.env.NOTE_TEXT || '',
       negativeNames: (process.env.NEGATIVE_NAMES || '').split(',').map((s) => s.trim()).filter(Boolean),
       overwrite: process.env.OVERWRITE_NOTE === '1',
-    }, { mode: process.env.NOTE_MODE || 'safeAttachOrSidecar' }));
+    }, { mode: process.env.NOTE_MODE || 'safeAttachOrSidecar' });
+    out(result);
+    exitOnFailure(result);
   } else if (cmd === 'clear-note') {
-    out(await clearNote({
+    const result = await clearNote({
       expectedName: process.env.EXPECTED_NAME,
       expectedAddress: process.env.EXPECTED_ADDRESS || '',
       listName: process.env.LIST_NAME || '',
       negativeNames: (process.env.NEGATIVE_NAMES || '').split(',').map((s) => s.trim()).filter(Boolean),
-    }, {}));
+    }, {});
+    out(result);
+    exitOnFailure(result);
   } else if (cmd === 'regions') {
     out(await listRegions({}));
   } else if (cmd === 'benchmark') {

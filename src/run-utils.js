@@ -14,6 +14,15 @@ export async function runWithRetry(fn, options = {}) {
   return pRetry(fn, { retries, minTimeout, factor, ...rest });
 }
 
+// Action results (save/attach/clear) report failure via fields instead of
+// throwing; entry points use this to exit non-zero / set MCP isError so a
+// failed action is never framed as success. Results without these fields
+// (resolve, benchmark, dry runs) are never flagged.
+export function actionFailed(result) {
+  if (!result || typeof result !== 'object' || result.dryRun) return false;
+  return result.ok === false || result.successLikely === false;
+}
+
 export async function saveFailureArtifacts(page, {
   label = 'failure',
   dir = loadConfig().failureDir,
