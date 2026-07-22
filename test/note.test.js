@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildNoteText, noteVerified } from '../src/maps/note.js';
+import { buildNoteText, noteVerified, planNoteWrite } from '../src/maps/note.js';
 
 test('buildNoteText composes 來源/推薦 lines from source and summary', () => {
   assert.equal(
@@ -31,4 +31,23 @@ test('noteVerified still fails on a genuinely different or empty note', () => {
   assert.equal(noteVerified('some other note', 'custom note line here'), false);
   assert.equal(noteVerified('', '來源：https://x/'), false);
   assert.equal(noteVerified('anything', ''), false);
+});
+
+test('planNoteWrite preserves an existing note unless overwrite is set', () => {
+  assert.deepEqual(
+    planNoteWrite({ existingText: '訂位電話 04-1234567', overwrite: false }),
+    { action: 'preserve', previousText: '訂位電話 04-1234567' },
+  );
+});
+
+test('planNoteWrite writes over an existing note only with explicit overwrite', () => {
+  assert.deepEqual(
+    planNoteWrite({ existingText: '舊附註', overwrite: true }),
+    { action: 'write', previousText: '舊附註' },
+  );
+});
+
+test('planNoteWrite writes when the note field is empty', () => {
+  assert.deepEqual(planNoteWrite({ existingText: '', overwrite: false }), { action: 'write', previousText: '' });
+  assert.deepEqual(planNoteWrite({}), { action: 'write', previousText: '' });
 });

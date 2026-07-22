@@ -27,6 +27,16 @@ export function verificationMarker({ sourceUrl = '', recommendationSummary = '',
   return '';
 }
 
+// Decide what to do with the note field's current content BEFORE typing.
+// Ctrl+A + type replaces the whole field, so a non-empty existing note is
+// only overwritten when the caller explicitly opts in; previousText is always
+// surfaced so the change can be undone.
+export function planNoteWrite({ existingText = '', overwrite = false } = {}) {
+  const previousText = existingText || '';
+  if (previousText && !overwrite) return { action: 'preserve', previousText };
+  return { action: 'write', previousText };
+}
+
 // The textarea may re-wrap whitespace, so compare with both sides normalized —
 // a raw includes() false-negative writes a duplicate sidecar for a note that
 // actually attached.
@@ -150,6 +160,7 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
     noteText: noteOverride = '',
     negativeNames = [],
     threshold = 8,
+    overwrite = false,
   } = payload;
 
   if (!config.profile) throw new Error('GOOGLE_MAPS_PROFILE not set');
@@ -208,6 +219,13 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
       });
     }
 
+    const plan = planNoteWrite({ existingText: sel.best.value, overwrite });
+    if (plan.action === 'preserve') {
+      return await fallback('existing note present (pass overwrite=true to replace it)', {
+        previousText: plan.previousText,
+      });
+    }
+
     const textarea = page.locator('textarea[aria-label="附註"]').nth(sel.best.i);
     await textarea.click({ force: true });
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
@@ -223,6 +241,7 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
       return await fallback('note not verified on exact place after write', {
         selectedScore: sel.best.score,
         verifyScore: verify.best?.score ?? null,
+        previousText: plan.previousText,
       });
     }
 
@@ -232,6 +251,7 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
       exactPlaceConfirmed: true,
       selectedTextareaScore: sel.best.score,
       verifiedText: verify.best.value,
+      previousText: plan.previousText,
       listName,
       url: page.url(),
     };
@@ -322,6 +342,7 @@ if (isMain) {
     recommendationSummary: process.env.RECOMMENDATION || '',
     noteText: process.env.NOTE_TEXT || '',
     negativeNames: (process.env.NEGATIVE_NAMES || '').split(',').map((s) => s.trim()).filter(Boolean),
+    overwrite: process.env.OVERWRITE_NOTE === '1',
   }, { mode: process.env.NOTE_MODE || 'safeAttachOrSidecar' })
     .then((r) => console.log(JSON.stringify(r, null, 2)))
     .catch((e) => { console.error(e.message); process.exit(1); });
