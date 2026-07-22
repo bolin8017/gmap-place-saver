@@ -73,16 +73,21 @@ async function fetchHtml(url) {
   }
 }
 
-function runYtDlp(url, config) {
+export function ytDlpCommands(url, config) {
   const baseArgs = ['--dump-json', '--skip-download', '--no-warnings'];
   const cookieArgs = config.ytdlpCookiesFromBrowser
     ? ['--cookies-from-browser', config.ytdlpCookiesFromBrowser]
     : [];
-  const candidates = [
-    ['yt-dlp', [...baseArgs, ...cookieArgs, url]],
-    ['uvx', ['--from', 'yt-dlp', 'yt-dlp', ...baseArgs, ...cookieArgs, url]],
+  // '--' keeps a crafted "URL" (e.g. --exec=…) positional instead of letting
+  // yt-dlp parse it as an option.
+  return [
+    ['yt-dlp', [...baseArgs, ...cookieArgs, '--', url]],
+    ['uvx', ['--from', 'yt-dlp', 'yt-dlp', ...baseArgs, ...cookieArgs, '--', url]],
   ];
-  for (const [cmd, args] of candidates) {
+}
+
+function runYtDlp(url, config) {
+  for (const [cmd, args] of ytDlpCommands(url, config)) {
     const result = spawnSync(cmd, args, { encoding: 'utf8', timeout: 25000, maxBuffer: 4 * 1024 * 1024 });
     if (result.status === 0 && result.stdout.trim()) {
       try { return { command: cmd, data: JSON.parse(result.stdout) }; } catch {}
