@@ -8,10 +8,16 @@ import { attachNote, clearNote } from '../src/maps/note.js';
 import { listRegions } from '../src/index.js';
 import { benchmarkSummary } from '../src/storage/benchmark.js';
 import { smokeCheck } from '../src/smoke.js';
+import { actionFailed } from '../src/run-utils.js';
 
 const server = new McpServer({ name: 'gmap', version: '0.1.0' });
 
-const ok = (result) => ({ content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] });
+// A save/attach/clear that reports failure in its result fields is an MCP
+// error too — an agent must never mistake "didn't save" for "saved".
+const ok = (result) => ({
+  content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+  ...(actionFailed(result) ? { isError: true } : {}),
+});
 const fail = (error) => ({ content: [{ type: 'text', text: `Error: ${error.message}` }], isError: true });
 const run = async (fn) => {
   try { return ok(await fn()); } catch (error) { return fail(error); }
