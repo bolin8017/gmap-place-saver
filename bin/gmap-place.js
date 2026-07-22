@@ -46,6 +46,7 @@ try {
       recommendationSummary: process.env.RECOMMENDATION || '',
       noteText: process.env.NOTE_TEXT || '',
       negativeNames: (process.env.NEGATIVE_NAMES || '').split(',').map((s) => s.trim()).filter(Boolean),
+      overwrite: process.env.OVERWRITE_NOTE === '1',
     }, { mode: process.env.NOTE_MODE || 'safeAttachOrSidecar' }));
   } else if (cmd === 'clear-note') {
     out(await clearNote({
