@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { loadConfig } from '../config.js';
 import { runWithRetry, saveFailureArtifacts } from '../run-utils.js';
+import { waitForBodyIncludes } from './maps-ui.js';
 import { appendBenchmark } from '../storage/benchmark.js';
 
 const detailActionSelectors = [
@@ -153,7 +154,13 @@ export async function savePlace({
 
     const title = await page.title().catch(() => '');
     const currentUrl = page.url();
-    const bodyAfterSearch = await getBody(page);
+    // waitForAny fires on the first visible selector, often before the detail
+    // panel finishes rendering — reading the body immediately makes
+    // placeFoundLikely a flaky false negative. Give the page time to actually
+    // show the expected name before judging.
+    const bodyAfterSearch = expectedName
+      ? await waitForBodyIncludes(page, expectedName, { timeout: 10000 })
+      : await getBody(page);
     const placeFoundLikely = placeFound(bodyAfterSearch, expectedName, expectedAddress);
 
     if (dryRun) {
