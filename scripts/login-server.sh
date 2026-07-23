@@ -30,6 +30,11 @@ NODE_BIN="${NODE_BIN:-node}"
 XVFB="${XVFB:-Xvfb}"
 X11VNC="${X11VNC:-x11vnc}"
 NOVNC_PROXY="${NOVNC_PROXY:-novnc_proxy}"   # ships with the `novnc` package
+# Debian/Ubuntu's novnc package installs the proxy outside PATH; fall back to
+# its packaged location when the plain name doesn't resolve.
+if ! command -v "$NOVNC_PROXY" >/dev/null 2>&1 && [[ -x /usr/share/novnc/utils/novnc_proxy ]]; then
+  NOVNC_PROXY=/usr/share/novnc/utils/novnc_proxy
+fi
 LOG_DIR="${LOG_DIR:-$REPO_ROOT/logs}"
 DISPLAY_ADDR=":${DISPLAY_NUM}"
 
