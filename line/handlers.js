@@ -15,7 +15,8 @@ export function createHandlers({ line, userStore, pending, queue, core, config, 
       await line.reply(replyToken, list);
     } catch (error) {
       log(`reply failed (${error.message}); falling back to push`);
-      await line.push(userId, list);
+      await line.push(userId, list)
+        .catch((pushError) => log(`push also failed for ${userId}: ${pushError.message}`));
     }
   }
 
@@ -105,6 +106,7 @@ export function createHandlers({ line, userStore, pending, queue, core, config, 
     try {
       parsed = JSON.parse(data);
     } catch {
+      log(`ignoring malformed postback data: ${data}`);
       return;
     }
     const record = await pending.take(parsed.id);

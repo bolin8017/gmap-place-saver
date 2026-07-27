@@ -156,3 +156,11 @@ test('when the reply token is dead the result falls back to push', async (t) => 
   assert.equal(w.sent.pushes[0].to, USER);
   assert.equal(w.sent.pushes[0].msgs[0].type, 'flex');
 });
+
+test('a dead reply and a dead push never escape the handler', async (t) => {
+  const w = await makeWorld(t, { failReply: true });
+  w.line.push = async () => { throw new Error('push down'); };
+  await w.handlers.handleEvent(msgEvent(USER, IG_URL));
+  assert.equal(w.sent.replies.length, 0);
+  assert.equal(w.sent.pushes.length, 0);
+});
