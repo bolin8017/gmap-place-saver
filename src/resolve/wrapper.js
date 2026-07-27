@@ -5,7 +5,7 @@ import { resolveSocial } from './social.js';
 import { resolveCandidate } from './candidate.js';
 import { appendBenchmark } from '../storage/benchmark.js';
 
-function isSocialUrl(value) {
+export function isSocialUrl(value) {
   try {
     const host = new URL(value).hostname;
     return /instagram|facebook|fb\.watch|threads/.test(host);
@@ -14,7 +14,7 @@ function isSocialUrl(value) {
   }
 }
 
-function isMapsUrl(value) {
+export function isMapsUrl(value) {
   try {
     const host = new URL(value).hostname;
     return /google\.|goo\.gl/.test(host) || host === 'maps.app.goo.gl';
