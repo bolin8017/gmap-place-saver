@@ -255,9 +255,11 @@ export async function savePlace({
         if (createClicked) {
           await sleep(1200);
           const bodyAfterCreate = await getBody(page);
-          // Verified state, not the click: the new list name (or the saved
-          // badge) must actually render before we claim the save landed.
-          listCreated = /已儲存|Saved/.test(bodyAfterCreate) || bodyAfterCreate.includes(listName);
+          // Verified state, not the click: require BOTH the saved badge and
+          // the list name to render — an error dialog echoing the typed name
+          // must not count. A false negative here is safe: retrying the save
+          // finds the created list and takes the listAlreadySelected path.
+          listCreated = /已儲存|Saved/.test(bodyAfterCreate) && bodyAfterCreate.includes(listName);
           listClicked = true;
           listSelected = listCreated;
           console.error(`created new list and saved: ${listName} (verified=${listCreated})`);
