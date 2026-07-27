@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { resolvePlace } from '../src/resolve/wrapper.js';
 import { savePlace } from '../src/maps/save.js';
+import { unsavePlace } from '../src/maps/unsave.js';
 import { attachNote, clearNote } from '../src/maps/note.js';
 import { appendBenchmark, benchmarkSummary } from '../src/storage/benchmark.js';
 import { listRegions } from '../src/index.js';
@@ -40,6 +41,15 @@ try {
     }, {});
     out(result);
     exitOnFailure(result);
+  } else if (cmd === 'unsave') {
+    const result = await unsavePlace({
+      placeUrl: process.env.PLACE_URL || '',
+      listName: process.env.LIST_NAME,
+      expectedName: process.env.EXPECTED_NAME,
+      expectedAddress: process.env.EXPECTED_ADDRESS || '',
+    }, {});
+    out(result);
+    exitOnFailure(result);
   } else if (cmd === 'attach') {
     const result = await attachNote({
       expectedName: process.env.EXPECTED_NAME,
@@ -67,7 +77,7 @@ try {
   } else if (cmd === 'benchmark') {
     out(await benchmarkSummary(Number(rest[0]) || 100, {}));
   } else {
-    console.error('Usage: gmap-place <resolve|save|attach|clear-note|regions|benchmark> [args]');
+    console.error('Usage: gmap-place <resolve|save|unsave|attach|clear-note|regions|benchmark> [args]');
     process.exit(2);
   }
 } catch (error) {

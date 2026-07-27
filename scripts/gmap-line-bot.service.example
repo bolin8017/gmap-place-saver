@@ -1,0 +1,15 @@
+# User unit: cp to ~/.config/systemd/user/gmap-line-bot.service, adjust paths,
+# then: systemctl --user daemon-reload && systemctl --user enable --now gmap-line-bot
+# Keep it alive after logout: loginctl enable-linger $USER
+[Unit]
+Description=gmap-place-saver LINE bot
+After=network-online.target
+
+[Service]
+WorkingDirectory=/home/CHANGE_ME/Documents/repositories/gmap-place-saver
+ExecStart=/usr/bin/env node line/server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -28,7 +28,7 @@ using a persistent, logged-in browser profile.
 
 ## Requirements
 
-- Node.js **>= 18** (uses the global `fetch`).
+- Node.js **>= 22** (required by `@line/bot-sdk`; Node 18/20 are EOL).
 - A Google account and a persistent Chromium profile logged into it (see
   [One-time login](#one-time-login)).
 - Playwright's Chromium: `npx playwright install chromium`.
@@ -214,6 +214,43 @@ Architecture: pure logic (config, social parsing, note scoring, recommendation)
 lives in small unit-tested modules; browser automation (`candidate`, `save`,
 `note`) are importable async functions; the MCP server and CLI both call the same
 core — no child-process spawning between layers.
+
+## LINE bot (friends edition)
+
+A thin LINE layer over the same core: a friend shares an IG/Threads/FB or
+Google Maps link to the bot, and the place lands in her own Google Maps county
+list (auto-created on first use). High-confidence resolutions save
+automatically; ambiguous ones come back as a "is this the one?" card; every
+result card has a one-tap undo. Replies use reply tokens (free); push messages
+are only a fallback, so the free LINE plan is plenty for a trusted circle.
+
+### Setup
+
+1. Create a Messaging API channel in the [LINE Developers console](https://developers.line.biz/console/).
+   Disable auto-reply messages. Note the channel secret and issue a channel
+   access token; put both in `.env` (`LINE_CHANNEL_SECRET`,
+   `LINE_CHANNEL_ACCESS_TOKEN`), plus your own user id as
+   `LINE_ADMIN_USER_ID`.
+2. Start the server: `npm run line:server` (or install
+   `scripts/gmap-line-bot.service.example` as a systemd user unit).
+3. Expose the webhook with a Cloudflare Tunnel:
+   `cloudflared tunnel --url http://127.0.0.1:3080` (quick tunnel), or a named
+   tunnel for a stable hostname. Set the channel's webhook URL to
+   `https://<tunnel-host>/webhook` and enable webhooks.
+
+### Onboarding a friend
+
+1. Get her LINE user id (it appears in the server log when she messages the
+   bot and is rejected).
+2. `npm run line:onboard -- <lineUserId> <display name>` — creates
+   `users/<id>/` with the Taiwan county template and allowlists her.
+3. Log her into Google once:
+   `GOOGLE_MAPS_PROFILE=users/<id>/profile ./scripts/login-server.sh`
+   and send her the (tunneled) noVNC link. After she signs in, she is live.
+
+Each user's tree under `users/<id>/` holds her Chromium profile, her
+`region-lists.json` (customizable), and her saved-place history. Remove the
+directory and the allowlist entry to offboard.
 
 ## License
 
