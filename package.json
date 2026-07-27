@@ -47,6 +47,7 @@
     "smoke:candidate": "PLACE_QUERY='彰化縣北斗鎮七星里民族路82號 小熊菓子 新北斗店' node src/resolve/candidate.js",
     "benchmark": "node bin/gmap-place.js benchmark 100",
     "login": "node scripts/login.js",
+    "line:onboard": "node line/onboard.js",
     "mcp": "node mcp/server.js"
   },
   "dependencies": {
