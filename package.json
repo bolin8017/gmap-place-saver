@@ -48,9 +48,11 @@
     "benchmark": "node bin/gmap-place.js benchmark 100",
     "login": "node scripts/login.js",
     "line:onboard": "node line/onboard.js",
+    "line:server": "node line/server.js",
     "mcp": "node mcp/server.js"
   },
   "dependencies": {
+    "@line/bot-sdk": "^11.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "p-retry": "^6.2.1",
     "playwright": "1.60.0",
