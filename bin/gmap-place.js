@@ -77,7 +77,7 @@ try {
   } else if (cmd === 'benchmark') {
     out(await benchmarkSummary(Number(rest[0]) || 100, {}));
   } else {
-    console.error('Usage: gmap-place <resolve|save|attach|clear-note|regions|benchmark> [args]');
+    console.error('Usage: gmap-place <resolve|save|unsave|attach|clear-note|regions|benchmark> [args]');
     process.exit(2);
   }
 } catch (error) {
