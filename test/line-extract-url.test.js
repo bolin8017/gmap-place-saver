@@ -54,3 +54,13 @@ test('strips a glued opening bracket before CJK text', () => {
     'https://www.instagram.com/p/Cxyz/',
   );
 });
+
+test('keeps parens inside long-form google maps place urls', () => {
+  const long = 'https://www.google.com/maps/place/ABC+Cafe+(Xinyi+Branch)/@25.033,121.564,17z';
+  assert.equal(extractSupportedUrl(`${long} 快去`), long);
+  assert.equal(extractSupportedUrl(`${long}(備註)快去`), long);
+});
+
+test('cuts glued captions from maps short links', () => {
+  assert.equal(extractSupportedUrl('https://maps.app.goo.gl/abc123(必吃)'), 'https://maps.app.goo.gl/abc123');
+});
