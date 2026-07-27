@@ -32,9 +32,13 @@ export function createWebhookServer({ channelSecret, handleEvent, log = (...a) =
     req.on('data', (chunk) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        res.writeHead(413);
-        res.end();
-        req.destroy();
+        // Stop consuming, answer, and only sever the connection after the
+        // 413 has actually flushed — destroying in the same tick races the
+        // response out of existence.
+        req.removeAllListeners('data');
+        req.removeAllListeners('end');
+        res.writeHead(413, { connection: 'close' });
+        res.end(() => req.destroy());
         return;
       }
       chunks.push(chunk);
@@ -56,6 +60,7 @@ export function createWebhookServer({ channelSecret, handleEvent, log = (...a) =
       try {
         parsed = JSON.parse(body.toString('utf8'));
       } catch {
+        log('ignoring signed webhook with unparseable JSON body');
         return;
       }
       for (const event of parsed.events || []) {

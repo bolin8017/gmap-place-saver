@@ -64,3 +64,15 @@ test('a handler that throws does not kill the server', async (t) => {
   assert.equal(res.status, 200);
   assert.equal((await fetch(`${base}/healthz`)).status, 200);
 });
+
+test('an oversized body gets a 413 response, and the server survives', async (t) => {
+  const base = await startServer(t, () => {});
+  const body = 'x'.repeat(1_100_000);
+  const res = await fetch(`${base}/webhook`, {
+    method: 'POST',
+    headers: { 'x-line-signature': sign(body) },
+    body,
+  });
+  assert.equal(res.status, 413);
+  assert.equal((await fetch(`${base}/healthz`)).status, 200);
+});
