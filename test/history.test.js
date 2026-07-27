@@ -53,3 +53,10 @@ test('removeHistory drops exactly one entry', async (t) => {
   assert.deepEqual((await readHistory({ config })).map((e) => e.id), [b.id]);
   assert.equal(await removeHistory('nope', { config }), false);
 });
+
+test('append always mints fresh id and timestamp, ignoring caller values', async (t) => {
+  const config = await tmpConfig(t);
+  const entry = await appendHistory({ ...sample, id: 'stale', at: '2001-01-01T00:00:00.000Z' }, { config });
+  assert.notEqual(entry.id, 'stale');
+  assert.notEqual(entry.at, '2001-01-01T00:00:00.000Z');
+});

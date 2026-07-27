@@ -10,7 +10,7 @@ function parseLines(text) {
 }
 
 export async function appendHistory(entry, { config = loadConfig() } = {}) {
-  const full = { id: randomUUID(), at: new Date().toISOString(), ...entry };
+  const full = { ...entry, id: randomUUID(), at: new Date().toISOString() };
   await fs.mkdir(path.dirname(config.historyFile), { recursive: true });
   await fs.appendFile(config.historyFile, `${JSON.stringify(full)}\n`);
   return full;
