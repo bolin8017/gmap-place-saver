@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 import { loadConfig } from '../config.js';
 import { runWithRetry, saveFailureArtifacts } from '../run-utils.js';
 import {
-  detailActionSelectors, withMapsLanguage, clickFirst, getBody, waitForAny, placeFound,
+  detailActionSelectors, withMapsLanguage, clickFirst, getBody, waitForAny, placeFound, isMissingBrowserError,
 } from './save.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -29,12 +29,20 @@ export async function unsavePlace({
   const startNs = process.hrtime.bigint();
   const elapsedMs = () => Math.round(Number(process.hrtime.bigint() - startNs) / 1e6);
 
-  const context = await chromium.launchPersistentContext(config.profile, {
-    headless: config.headless,
-    viewport: { width: 1366, height: 900 },
-    locale: 'zh-TW',
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--lang=zh-TW', '--window-size=1366,900'],
-  });
+  let context;
+  try {
+    context = await chromium.launchPersistentContext(config.profile, {
+      headless: config.headless,
+      viewport: { width: 1366, height: 900 },
+      locale: 'zh-TW',
+      args: ['--no-sandbox', '--disable-dev-shm-usage', '--lang=zh-TW', '--window-size=1366,900'],
+    });
+  } catch (error) {
+    if (isMissingBrowserError(error)) {
+      throw new Error(`Playwright Chromium is not installed. Run: npx playwright install chromium\n(${error.message})`);
+    }
+    throw error;
+  }
   let page = null;
   try {
     page = context.pages()[0] || await context.newPage();

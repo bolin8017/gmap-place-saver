@@ -66,7 +66,7 @@ export async function waitForAny(page, selectors, label, timeout = 15000) {
   return null;
 }
 
-function isMissingBrowserError(error) {
+export function isMissingBrowserError(error) {
   return /Executable doesn'?t exist|playwright install|please run the following command/i.test(error?.message || '');
 }
 
