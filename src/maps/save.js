@@ -6,7 +6,7 @@ import { runWithRetry, saveFailureArtifacts } from '../run-utils.js';
 import { waitForBodyIncludes } from './maps-ui.js';
 import { appendBenchmark } from '../storage/benchmark.js';
 
-const detailActionSelectors = [
+export const detailActionSelectors = [
   'button[aria-label^="儲存"]',
   'button[aria-label*="儲存"]',
   'button:has-text("儲存")',
@@ -19,7 +19,7 @@ const detailActionSelectors = [
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-function withMapsLanguage(url) {
+export function withMapsLanguage(url) {
   if (!url) return url;
   try {
     const parsed = new URL(url);
@@ -42,7 +42,7 @@ async function firstVisible(page, selectors, timeout = 2500) {
   return null;
 }
 
-async function clickFirst(page, selectors, label, timeout = 2500, options = {}) {
+export async function clickFirst(page, selectors, label, timeout = 2500, options = {}) {
   const found = await firstVisible(page, selectors, timeout);
   if (!found) return null;
   await found.loc.click({ timeout: 8000, ...options });
@@ -51,11 +51,11 @@ async function clickFirst(page, selectors, label, timeout = 2500, options = {}) 
   return found.selector;
 }
 
-async function getBody(page) {
+export async function getBody(page) {
   return await page.locator('body').innerText({ timeout: 15000 }).catch(() => '');
 }
 
-async function waitForAny(page, selectors, label, timeout = 15000) {
+export async function waitForAny(page, selectors, label, timeout = 15000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     const found = await firstVisible(page, selectors, 700);

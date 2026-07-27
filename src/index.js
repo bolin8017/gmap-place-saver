@@ -4,6 +4,7 @@ import { resolvePlace } from './resolve/wrapper.js';
 import { resolveSocial } from './resolve/social.js';
 import { resolveCandidate } from './resolve/candidate.js';
 import { savePlace } from './maps/save.js';
+import { unsavePlace } from './maps/unsave.js';
 import { attachNote, clearNote } from './maps/note.js';
 import { benchmarkSummary } from './storage/benchmark.js';
 import { buildRecommendationSummary } from './recommendation.js';
@@ -17,6 +18,7 @@ export {
   resolveSocial,
   resolveCandidate,
   savePlace,
+  unsavePlace,
   attachNote,
   clearNote,
   benchmarkSummary,

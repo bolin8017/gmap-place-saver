@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { resolvePlace } from '../src/resolve/wrapper.js';
 import { savePlace } from '../src/maps/save.js';
+import { unsavePlace } from '../src/maps/unsave.js';
 import { attachNote, clearNote } from '../src/maps/note.js';
 import { appendBenchmark, benchmarkSummary } from '../src/storage/benchmark.js';
 import { listRegions } from '../src/index.js';
@@ -37,6 +38,15 @@ try {
       saveClicked: result.saveClicked, listClicked: result.listClicked, savedIndicator: result.savedIndicator,
       listNameVisible: result.listNameVisible, successLikely: result.successLikely,
       elapsedMs: result.elapsedMs, at: new Date().toISOString(),
+    }, {});
+    out(result);
+    exitOnFailure(result);
+  } else if (cmd === 'unsave') {
+    const result = await unsavePlace({
+      placeUrl: process.env.PLACE_URL || '',
+      listName: process.env.LIST_NAME,
+      expectedName: process.env.EXPECTED_NAME,
+      expectedAddress: process.env.EXPECTED_ADDRESS || '',
     }, {});
     out(result);
     exitOnFailure(result);
