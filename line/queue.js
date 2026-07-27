@@ -6,8 +6,14 @@ export function createQueue() {
   return {
     push(job) {
       depth += 1;
-      const run = tail.then(job);
-      tail = run.catch(() => {}).finally(() => { depth -= 1; });
+      const run = tail.then(() => job());
+      // Attached directly to `run` (not a derived chain) so the decrement
+      // lands before any caller continuation that awaits the same promise;
+      // the two-handler form avoids the unhandled rejection a .finally()
+      // chain would create for rejected jobs.
+      const settled = () => { depth -= 1; };
+      run.then(settled, settled);
+      tail = run.catch(() => {});
       return run;
     },
     size() {

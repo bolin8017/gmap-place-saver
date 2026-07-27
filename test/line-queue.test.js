@@ -29,3 +29,21 @@ test('size reflects queued plus running jobs', async () => {
   await Promise.all([p1, p2]);
   assert.equal(queue.size(), 0);
 });
+
+test('size is accurate immediately after each awaited job settles', async () => {
+  const queue = createQueue();
+  await queue.push(async () => 'fast');
+  assert.equal(queue.size(), 0);
+  const failing = queue.push(async () => { throw new Error('boom'); });
+  const ok = queue.push(async () => 'fine');
+  await failing.catch(() => {});
+  await ok;
+  assert.equal(queue.size(), 0);
+});
+
+test('jobs never receive a previous job result as argument', async () => {
+  const queue = createQueue();
+  await queue.push(async () => 'leak');
+  const seen = await queue.push(async (arg) => arg);
+  assert.equal(seen, undefined);
+});
