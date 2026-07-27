@@ -24,10 +24,10 @@ test('expired records yield null and are purged on the next put', async (t) => {
   const store = createPendingStore(file, { now: () => clock });
   const id = await store.put('save', { a: 1 }, 500);
   clock = 2_000;
-  assert.equal(await store.take(id), null);
   await store.put('undo', { b: 2 }, 500);
   const onDisk = JSON.parse(await fs.readFile(file, 'utf8'));
   assert.equal(Object.keys(onDisk).length, 1);
+  assert.equal(await store.take(id), null);
 });
 
 test('records survive a restart (new store on the same file)', async (t) => {
