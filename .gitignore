@@ -8,3 +8,5 @@ config/region-lists.json
 # browser profiles if ever placed inside the repo
 profile/
 profiles/
+# per-user LINE bot trees (Google sessions + friend PII)
+users/
