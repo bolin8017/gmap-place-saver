@@ -31,3 +31,14 @@ test('returns empty string when nothing matches', () => {
   assert.equal(extractSupportedUrl(''), '');
   assert.equal(extractSupportedUrl(null), '');
 });
+
+test('strips a glued opening bracket before CJK text', () => {
+  assert.equal(
+    extractSupportedUrl('超好吃!https://www.instagram.com/p/Cxyz/(必吃)超推'),
+    'https://www.instagram.com/p/Cxyz/',
+  );
+  assert.equal(
+    extractSupportedUrl('https://www.instagram.com/reel/DZvu5h9Tyqe/[必看]'),
+    'https://www.instagram.com/reel/DZvu5h9Tyqe/',
+  );
+});
