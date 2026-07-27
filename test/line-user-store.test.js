@@ -58,14 +58,29 @@ test('re-onboarding keeps a customized region config', async (t) => {
 
 test('userEnv bridges into loadConfig with per-user home and shared caches', async (t) => {
   const config = await tmpConfig(t);
+  config.ytdlpCookiesFromBrowser = 'chromium';
   const store = createUserStore({ config });
+  const OTHER = `U${'b'.repeat(32)}`;
   await onboardUser(USER, '', { config });
-  const userConfig = loadConfig(store.userEnv(USER));
-  const home = store.userDir(USER);
-  assert.equal(userConfig.profile, path.join(home, 'profile'));
-  assert.equal(userConfig.regionConfig, path.join(home, 'region-lists.json'));
-  assert.equal(userConfig.historyFile, path.join(home, 'data/saved-history.jsonl'));
-  assert.equal(userConfig.sidecarDir, path.join(home, 'data/sidecar-notes'));
-  assert.equal(userConfig.candidateCache, config.candidateCache);
-  assert.equal(userConfig.socialCache, config.socialCache);
+  await onboardUser(OTHER, '', { config });
+  for (const id of [USER, OTHER]) {
+    const userConfig = loadConfig(store.userEnv(id));
+    const home = store.userDir(id);
+    assert.equal(userConfig.profile, path.join(home, 'profile'));
+    assert.equal(userConfig.regionConfig, path.join(home, 'region-lists.json'));
+    assert.equal(userConfig.historyFile, path.join(home, 'data/saved-history.jsonl'));
+    assert.equal(userConfig.sidecarDir, path.join(home, 'data/sidecar-notes'));
+    assert.equal(userConfig.candidateCache, config.candidateCache);
+    assert.equal(userConfig.socialCache, config.socialCache);
+    assert.equal(userConfig.headless, true);
+    assert.equal(userConfig.ytdlpCookiesFromBrowser, 'chromium');
+  }
+});
+
+test('onboarding locks the users tree to 0o700', async (t) => {
+  const config = await tmpConfig(t);
+  const store = createUserStore({ config });
+  const { home } = await onboardUser(USER, '', { config });
+  assert.equal((await fs.stat(store.usersDir)).mode & 0o777, 0o700);
+  assert.equal((await fs.stat(home)).mode & 0o777, 0o700);
 });

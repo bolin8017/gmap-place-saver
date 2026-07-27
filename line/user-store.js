@@ -66,8 +66,14 @@ export async function onboardUser(userId, name, { config = loadConfig(), templat
   const store = createUserStore({ config });
   const home = store.userDir(userId);
   const templateFile = template || path.join(config.home, 'config/region-lists.taiwan.json');
-  await fs.mkdir(path.join(home, 'data'), { recursive: true });
-  await fs.mkdir(path.join(home, 'logs'), { recursive: true });
+  // Lock the tree down before any content lands: profiles hold Google
+  // sessions, and mkdir's mode is still subject to umask, so chmod right
+  // after each create rather than as a final pass.
+  await fs.mkdir(store.usersDir, { recursive: true, mode: 0o700 });
+  await fs.chmod(store.usersDir, 0o700);
+  await fs.mkdir(path.join(home, 'data'), { recursive: true, mode: 0o700 });
+  await fs.mkdir(path.join(home, 'logs'), { recursive: true, mode: 0o700 });
+  await fs.chmod(home, 0o700);
   const regionFile = path.join(home, 'region-lists.json');
   try {
     await fs.copyFile(templateFile, regionFile, fsConstants.COPYFILE_EXCL);
@@ -77,8 +83,5 @@ export async function onboardUser(userId, name, { config = loadConfig(), templat
   const all = await store.allowlist();
   all[userId] = { name: name || '', onboardedAt: new Date().toISOString() };
   await writeJsonAtomic(store.allowlistFile, all);
-  // The tree holds Google sessions; keep other local users out.
-  await fs.chmod(store.usersDir, 0o700);
-  await fs.chmod(home, 0o700);
   return { home, regionFile };
 }
