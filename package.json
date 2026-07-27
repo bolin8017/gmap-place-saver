@@ -24,7 +24,7 @@
     "url": "https://github.com/bolin8017/gmap-place-saver/issues"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "bin": {
     "gmap-place": "bin/gmap-place.js",

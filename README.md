@@ -28,7 +28,7 @@ using a persistent, logged-in browser profile.
 
 ## Requirements
 
-- Node.js **>= 18** (uses the global `fetch`).
+- Node.js **>= 22** (required by `@line/bot-sdk`; Node 18/20 are EOL).
 - A Google account and a persistent Chromium profile logged into it (see
   [One-time login](#one-time-login)).
 - Playwright's Chromium: `npx playwright install chromium`.
