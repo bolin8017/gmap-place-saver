@@ -34,6 +34,7 @@ async function makeWorld(t, { resolveResult = highConfidence, saveResult, unsave
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const userConfig = { historyFile: path.join(dir, 'history.jsonl'), profile: path.join(dir, 'profile') };
   const sent = { replies: [], pushes: [], loading: [] };
+  const logs = [];
   const line = {
     reply: async (token, msgs) => {
       if (failReply) throw new Error('reply token expired');
@@ -59,9 +60,9 @@ async function makeWorld(t, { resolveResult = highConfidence, saveResult, unsave
   const pending = createPendingStore(path.join(dir, 'pending.json'));
   const handlers = createHandlers({
     line, userStore, pending, queue: createQueue(), core,
-    config: { lineAdminUserId: ADMIN }, log: () => {},
+    config: { lineAdminUserId: ADMIN }, log: (...args) => logs.push(args.join(' ')),
   });
-  return { userConfig, sent, calls, line, pending, handlers };
+  return { userConfig, sent, calls, line, pending, handlers, logs };
 }
 
 const firstReplyText = (sent) => sent.replies[0].msgs[0].text || '';
@@ -163,4 +164,11 @@ test('a dead reply and a dead push never escape the handler', async (t) => {
   await w.handlers.handleEvent(msgEvent(USER, IG_URL));
   assert.equal(w.sent.replies.length, 0);
   assert.equal(w.sent.pushes.length, 0);
+});
+
+test('a rejected stranger is logged so the admin can onboard them', async (t) => {
+  const w = await makeWorld(t);
+  const stranger = `U${'f'.repeat(32)}`;
+  await w.handlers.handleEvent(msgEvent(stranger, IG_URL));
+  assert.ok(w.logs.some((line) => line.includes(stranger)));
 });

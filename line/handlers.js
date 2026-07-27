@@ -153,6 +153,7 @@ export function createHandlers({ line, userStore, pending, queue, core, config, 
   async function handleEvent(event) {
     const userId = event?.source?.userId || '';
     if (!userId || !(await userStore.isAllowed(userId))) {
+      log(`rejected event from ${userId || 'unknown'} (${event?.type})`);
       if (event?.replyToken) {
         await line.reply(event.replyToken, [messages.rejectMessage()])
           .catch((error) => log(`reject reply failed: ${error.message}`));
