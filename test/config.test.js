@@ -71,3 +71,28 @@ test('.env fills in unset vars but real env always wins', async () => {
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+test('line bot settings default sanely and honor env overrides', () => {
+  const d = loadConfig({});
+  assert.ok(d.usersDir.endsWith('users'));
+  assert.ok(d.historyFile.endsWith(path.join('data', 'saved-history.jsonl')));
+  assert.equal(d.linePort, 3080);
+  assert.equal(d.lineChannelSecret, '');
+  assert.equal(d.lineChannelAccessToken, '');
+  assert.equal(d.lineAdminUserId, '');
+
+  const c = loadConfig({
+    GMAP_USERS_DIR: '/x/users',
+    GMAP_HISTORY_FILE: '/x/h.jsonl',
+    GMAP_LINE_PORT: '4000',
+    LINE_CHANNEL_SECRET: 'secret',
+    LINE_CHANNEL_ACCESS_TOKEN: 'token',
+    LINE_ADMIN_USER_ID: 'Uadmin',
+  });
+  assert.equal(c.usersDir, '/x/users');
+  assert.equal(c.historyFile, '/x/h.jsonl');
+  assert.equal(c.linePort, 4000);
+  assert.equal(c.lineChannelSecret, 'secret');
+  assert.equal(c.lineChannelAccessToken, 'token');
+  assert.equal(c.lineAdminUserId, 'Uadmin');
+});
