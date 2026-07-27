@@ -41,4 +41,16 @@ test('strips a glued opening bracket before CJK text', () => {
     extractSupportedUrl('https://www.instagram.com/reel/DZvu5h9Tyqe/[必看]'),
     'https://www.instagram.com/reel/DZvu5h9Tyqe/',
   );
+  assert.equal(
+    extractSupportedUrl('https://www.instagram.com/p/Cxyz/(2樓)超推'),
+    'https://www.instagram.com/p/Cxyz/',
+  );
+  assert.equal(
+    extractSupportedUrl('https://www.instagram.com/p/Cxyz/(5折)必吃'),
+    'https://www.instagram.com/p/Cxyz/',
+  );
+  assert.equal(
+    extractSupportedUrl('https://www.instagram.com/p/Cxyz/(2F)超推'),
+    'https://www.instagram.com/p/Cxyz/',
+  );
 });
