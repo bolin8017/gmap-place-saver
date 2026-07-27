@@ -211,6 +211,7 @@ export async function savePlace({
     let listClicked = false;
     let listAlreadySelected = false;
     let listSelected = false;
+    let listCreated = false;
     const listRowSelectors = [
       `div[role="menuitemradio"]:has-text("${listName}")`,
       `div[role="menuitemcheckbox"]:has-text("${listName}")`,
@@ -231,6 +232,36 @@ export async function savePlace({
         listClicked = true;
         listSelected = ariaCheckedAfter === 'true';
         console.error(`clicked save-dialog list row: ${listName} (aria-checked=${ariaCheckedAfter})`);
+      }
+    }
+    if (!listClicked) {
+      // The county list may simply not exist yet (lists are created lazily,
+      // one per county on first save). "新增清單" in the save dialog both
+      // creates the list and saves the place into it.
+      const newListClicked = await clickFirst(page, [
+        'div[role="menuitem"]:has-text("新增清單")',
+        'button:has-text("新增清單")',
+        'div[role="menuitem"]:has-text("New list")',
+        'button:has-text("New list")',
+      ], 'new list button', 4000);
+      if (newListClicked) {
+        const nameBox = page.locator('input[aria-label*="清單名稱"], input[aria-label*="List name"], div[role="dialog"] input[type="text"]').first();
+        await nameBox.waitFor({ state: 'visible', timeout: 8000 });
+        await nameBox.fill(listName);
+        const createClicked = await clickFirst(page, [
+          'button:has-text("建立")',
+          'button:has-text("Create")',
+        ], 'create list button', 5000);
+        if (createClicked) {
+          await sleep(1200);
+          const bodyAfterCreate = await getBody(page);
+          // Verified state, not the click: the new list name (or the saved
+          // badge) must actually render before we claim the save landed.
+          listCreated = /已儲存|Saved/.test(bodyAfterCreate) || bodyAfterCreate.includes(listName);
+          listClicked = true;
+          listSelected = listCreated;
+          console.error(`created new list and saved: ${listName} (verified=${listCreated})`);
+        }
       }
     }
     mark('list-selection-attempted');
@@ -268,6 +299,7 @@ export async function savePlace({
       listClicked,
       listSelected,
       listAlreadySelected,
+      listCreated,
       doneClicked: Boolean(doneClicked),
       finalTitle,
       finalUrl,
