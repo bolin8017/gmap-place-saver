@@ -1,0 +1,21 @@
+# User unit: cp to ~/.config/systemd/user/gmap-line-tunnel.service, adjust
+# paths, then: systemctl --user daemon-reload && systemctl --user enable --now
+# gmap-line-tunnel. Keep it alive after logout: loginctl enable-linger $USER
+#
+# Runs a Cloudflare quick tunnel in front of the LINE webhook server and
+# re-registers the channel webhook endpoint each time the tunnel hostname
+# changes (line/tunnel.js). PATH must reach both node and cloudflared.
+[Unit]
+Description=gmap-place-saver LINE webhook tunnel
+After=network-online.target gmap-line-bot.service
+Wants=gmap-line-bot.service
+
+[Service]
+WorkingDirectory=/home/CHANGE_ME/Documents/repositories/gmap-place-saver
+Environment=PATH=/home/CHANGE_ME/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node line/tunnel.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

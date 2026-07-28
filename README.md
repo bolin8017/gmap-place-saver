@@ -233,10 +233,13 @@ are only a fallback, so the free LINE plan is plenty for a trusted circle.
    `LINE_ADMIN_USER_ID`.
 2. Start the server: `npm run line:server` (or install
    `scripts/gmap-line-bot.service.example` as a systemd user unit).
-3. Expose the webhook with a Cloudflare Tunnel:
-   `cloudflared tunnel --url http://127.0.0.1:3080` (quick tunnel), or a named
-   tunnel for a stable hostname. Set the channel's webhook URL to
-   `https://<tunnel-host>/webhook` and enable webhooks.
+3. Expose the webhook with a Cloudflare Tunnel. Easiest: `npm run line:tunnel`
+   (or install `scripts/gmap-line-tunnel.service.example` as a systemd user
+   unit) — it runs a quick tunnel and re-registers the channel's webhook
+   endpoint via the LINE API every time the temporary hostname changes, so no
+   domain is needed. Just enable webhooks once in the console. Alternatively
+   run a named tunnel for a stable hostname (requires a Cloudflare-managed
+   domain) and set `https://<tunnel-host>/webhook` manually.
 
 ### Onboarding a friend
 
