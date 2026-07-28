@@ -62,7 +62,7 @@ export function createUserStore({ config = loadConfig() } = {}) {
   };
 }
 
-export async function onboardUser(userId, name, { config = loadConfig(), template = '' } = {}) {
+export async function onboardUser(userId, name, { config = loadConfig(), template = '', shareWith = '' } = {}) {
   const store = createUserStore({ config });
   const home = store.userDir(userId);
   const templateFile = template || path.join(config.home, 'config/region-lists.taiwan.json');
@@ -71,6 +71,24 @@ export async function onboardUser(userId, name, { config = loadConfig(), templat
   // after each create rather than as a final pass.
   await fs.mkdir(store.usersDir, { recursive: true, mode: 0o700 });
   await fs.chmod(store.usersDir, 0o700);
+
+  if (shareWith) {
+    // Several LINE users may share one Google account (e.g. a couple): the
+    // new user's home becomes a symlink to the existing user's, so profile,
+    // region config, and history — including cross-user dedupe — are one.
+    // The source must already hold a logged-in profile; one login per account.
+    store.userDir(shareWith);
+    if (!(await store.isOnboarded(shareWith))) throw new Error(`share-with user is not onboarded: ${shareWith}`);
+    try {
+      await fs.symlink(shareWith, home, 'dir');
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error; // re-onboarding keeps the link
+    }
+    const shared = await store.allowlist();
+    shared[userId] = { name: name || '', onboardedAt: new Date().toISOString(), sharesWith: shareWith };
+    await writeJsonAtomic(store.allowlistFile, shared);
+    return { home, regionFile: path.join(home, 'region-lists.json') };
+  }
   await fs.mkdir(path.join(home, 'data'), { recursive: true, mode: 0o700 });
   await fs.mkdir(path.join(home, 'logs'), { recursive: true, mode: 0o700 });
   await fs.chmod(home, 0o700);

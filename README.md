@@ -243,6 +243,13 @@ are only a fallback, so the free LINE plan is plenty for a trusted circle.
 
 ### Onboarding a friend
 
+Have her create a **dedicated Google account** for the bot first. The server
+stores a full logged-in browser session, which is equivalent to holding the
+account — a burner account that only ever contains food lists keeps that
+trust boundary honest. To browse the results comfortably, she can share the
+burner's lists (link sharing) and follow them from her main account: followed
+lists show up in her own Maps without account switching.
+
 1. Get her LINE user id (it appears in the server log when she messages the
    bot and is rejected).
 2. `npm run line:onboard -- <lineUserId> <display name>` — creates
@@ -251,9 +258,17 @@ are only a fallback, so the free LINE plan is plenty for a trusted circle.
    `GOOGLE_MAPS_PROFILE=users/<id>/profile ./scripts/login-server.sh`
    and send her the (tunneled) noVNC link. After she signs in, she is live.
 
+Several LINE users may share one Google account (e.g. a couple): onboard the
+first user normally, and after her login add the others with
+`npm run line:onboard -- <otherLineUserId> <name> --share-with <lineUserId>`.
+They then share the profile, region config, and history — a place one of
+them saved answers "already saved" to the other. One LINE user driving
+multiple Google accounts is not supported.
+
 Each user's tree under `users/<id>/` holds her Chromium profile, her
 `region-lists.json` (customizable), and her saved-place history. Remove the
-directory and the allowlist entry to offboard.
+directory and the allowlist entry to offboard (for `--share-with` users the
+directory is just a symlink; removing it never touches the shared account).
 
 ## License
 
