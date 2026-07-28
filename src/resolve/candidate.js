@@ -176,7 +176,12 @@ export async function resolveCandidate({ query = '', placeUrl = '', sourceUrl = 
   if (useCache && cacheKey) {
     const cache = await readCache(config.candidateCache);
     if (cache[cacheKey] && hasUsefulCandidate(cache[cacheKey])) {
-      return { ...cache[cacheKey], cacheHit: true };
+      // Routing is per-caller (region config) while the cache is shared —
+      // recompute it from the cached address instead of trusting the value
+      // baked in at write time. Body text is not cached, so the body-based
+      // fallback only applies to fresh resolutions.
+      const entry = cache[cacheKey];
+      return { ...entry, targetList: inferTargetListFromPage(regionEntries, entry.address || '', ''), cacheHit: true };
     }
   }
 

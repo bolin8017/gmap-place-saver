@@ -70,3 +70,23 @@ test('the cache stores only the canonical key (no dead raw-URL entry)', async ()
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+test('a cache hit re-routes with the caller region config', async () => {
+  // The cache is shared across users but targetList depends on the caller's
+  // per-user region config — routing baked in at write time must not leak.
+  const { dir, config } = await makeConfig();
+  const restore = stubFetch(async (url) => ({ ok: true, status: 200, url: String(url), text: async () => GOOD_HTML }));
+  try {
+    const url = 'https://www.instagram.com/reel/rerouted/';
+    const r1 = await resolveSocial(url, { config, useYtDlp: false });
+    assert.equal(r1.targetList, '彰化');
+    const otherRegionConfig = path.join(dir, 'region-lists-user.json');
+    await fs.writeFile(otherRegionConfig, JSON.stringify({ 彰化縣: ['彰化縣'] }));
+    const r2 = await resolveSocial(url, { config: { ...config, regionConfig: otherRegionConfig }, useYtDlp: false });
+    assert.ok(r2.cacheHit);
+    assert.equal(r2.targetList, '彰化縣');
+  } finally {
+    restore();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});

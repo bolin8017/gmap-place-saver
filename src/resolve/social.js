@@ -203,6 +203,19 @@ export function matchTargetLists(regionEntries, text) {
   return regionEntries.filter((entry) => entry.pattern?.test(text)).map((entry) => entry.listName);
 }
 
+// Routing is per-caller (each user has their own region config) while the
+// resolution caches are shared, so it must be recomputed from the address on
+// every read — never trusted from a cached entry.
+export function routeByAddress(regionEntries, address) {
+  const region = inferRegion(regionEntries, address || '');
+  const targetListCandidates = matchTargetLists(regionEntries, `${region}\n${address || ''}`);
+  return {
+    region,
+    targetListCandidates,
+    targetList: targetListCandidates.length === 1 ? targetListCandidates[0] : '',
+  };
+}
+
 // Exactly one matching list routes; zero or several return '' so the caller
 // must confirm instead of silently picking whichever list comes first.
 export function inferTargetList(regionEntries, region, address) {
@@ -266,12 +279,12 @@ export async function resolveSocial(sourceUrl, {
   const elapsedMs = () => Math.round(Number(process.hrtime.bigint() - startNs) / 1e6);
   const key = canonicalizeSourceUrl(sourceUrl);
 
+  const regionEntries = await loadRegionEntries(config);
+
   if (useCache) {
     const cache = await readJson(config.socialCache, {});
-    if (cache[key]) return { ...cache[key], cacheHit: true };
+    if (cache[key]) return { ...cache[key], ...routeByAddress(regionEntries, cache[key].address), cacheHit: true };
   }
-
-  const regionEntries = await loadRegionEntries(config);
   let htmlResult = null;
   let meta = {};
   let yt = null;
@@ -301,9 +314,7 @@ export async function resolveSocial(sourceUrl, {
   ]).join('\n'));
   const address = extractAddress(caption);
   const placeName = extractPlaceName(caption, address);
-  const region = inferRegion(regionEntries, address);
-  const targetListCandidates = matchTargetLists(regionEntries, `${region}\n${address}`);
-  const targetList = targetListCandidates.length === 1 ? targetListCandidates[0] : '';
+  const { region, targetListCandidates, targetList } = routeByAddress(regionEntries, address);
   const mapsQuery = makeMapsQuery(placeName, address);
 
   const result = {
