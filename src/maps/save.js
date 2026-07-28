@@ -17,6 +17,42 @@ export const detailActionSelectors = [
   'button:has-text("Saved")',
 ];
 
+// County list names (苗栗, 彰化…) always appear in the place address, so the
+// dialog wait must anchor on dialog roles — a free-text or role="button"
+// matcher fires before the menu renders and the row click races it.
+export function saveDialogWaitSelectors(listName) {
+  return [
+    `div[role="menuitemradio"]:has-text("${listName}")`,
+    `div[role="menuitemcheckbox"]:has-text("${listName}")`,
+    `div[role="checkbox"]:has-text("${listName}")`,
+    'div[role="menuitem"]:has-text("新增清單")',
+    'button:has-text("新增清單")',
+    'div[role="menuitem"]:has-text("New list")',
+    'button:has-text("New list")',
+    'button:has-text("完成")',
+    'button:has-text("Done")',
+  ];
+}
+
+// Right after an unsave, Google can serve the save dialog with a stale
+// checked row for a place that is no longer saved (eventual consistency).
+// The detail chip (儲存 vs 已儲存) has never been observed stale, so
+// "already saved" requires both independent facts to agree; on disagreement
+// the caller falls through to click-and-verify, which settles it honestly.
+export function listAlreadySavedVerified({ rowChecked, chipAlreadySaved }) {
+  return Boolean(rowChecked && chipAlreadySaved);
+}
+
+// Selecting a radio row closes the menu immediately, so the row's aria-checked
+// read-back goes stale. Selection still has to come from read-back state: the
+// row itself while the menu is open, otherwise the 已儲存於「清單」 banner on
+// the refreshed detail panel — the bare address (苗栗縣…) or an error dialog
+// echoing the typed list name must not count.
+export function listSelectionVerified({ rowVisible, ariaChecked, bodyText, listName }) {
+  if (rowVisible) return ariaChecked === 'true';
+  return bodyText.includes(`已儲存於「${listName}」`);
+}
+
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 export function withMapsLanguage(url) {
@@ -177,6 +213,7 @@ export async function savePlace({
       };
     }
 
+    const chipAlreadySaved = await page.locator('div[role="main"] button[aria-label^="已儲存"]').first().isVisible().catch(() => false);
     let saveClicked = await clickFirst(page, detailActionSelectors, 'save/saved button', 6000);
     mark('save-click-attempted');
 
@@ -197,15 +234,7 @@ export async function savePlace({
       }
     }
 
-    await waitForAny(page, [
-      `div[role="menuitemradio"]:has-text("${listName}")`,
-      `div[role="menuitemcheckbox"]:has-text("${listName}")`,
-      `div[role="checkbox"]:has-text("${listName}")`,
-      `div[role="button"]:has-text("${listName}")`,
-      `text=${listName}`,
-      'button:has-text("完成")',
-      'button:has-text("Done")',
-    ], 'save list dialog', 12000);
+    await waitForAny(page, saveDialogWaitSelectors(listName), 'save list dialog', 12000);
     mark('save-dialog-visible');
 
     let listClicked = false;
@@ -220,18 +249,23 @@ export async function savePlace({
     const clickableListRow = page.locator(listRowSelectors.join(', ')).first();
     if (await clickableListRow.isVisible({ timeout: 8000 }).catch(() => false)) {
       const ariaCheckedBefore = await clickableListRow.getAttribute('aria-checked').catch(() => null);
-      if (ariaCheckedBefore === 'true') {
+      if (listAlreadySavedVerified({ rowChecked: ariaCheckedBefore === 'true', chipAlreadySaved })) {
         listAlreadySelected = true;
         listClicked = true;
         listSelected = true;
-        console.error(`list already selected: ${listName}`);
+        console.error(`list already selected: ${listName} (chip agrees)`);
       } else {
         await clickableListRow.click({ timeout: 8000, force: true });
-        await sleep(700);
-        const ariaCheckedAfter = await clickableListRow.getAttribute('aria-checked').catch(() => null);
         listClicked = true;
-        listSelected = ariaCheckedAfter === 'true';
-        console.error(`clicked save-dialog list row: ${listName} (aria-checked=${ariaCheckedAfter})`);
+        const deadline = Date.now() + 6000;
+        while (!listSelected && Date.now() < deadline) {
+          await sleep(400);
+          const rowVisible = await clickableListRow.isVisible().catch(() => false);
+          const ariaChecked = rowVisible ? await clickableListRow.getAttribute('aria-checked').catch(() => null) : null;
+          const bodyText = rowVisible ? '' : await getBody(page);
+          listSelected = listSelectionVerified({ rowVisible, ariaChecked, bodyText, listName });
+        }
+        console.error(`clicked save-dialog list row: ${listName} (verified=${listSelected})`);
       }
     }
     if (!listClicked) {
@@ -253,13 +287,16 @@ export async function savePlace({
           'button:has-text("Create")',
         ], 'create list button', 5000);
         if (createClicked) {
-          await sleep(1200);
-          const bodyAfterCreate = await getBody(page);
-          // Verified state, not the click: require BOTH the saved badge and
-          // the list name to render — an error dialog echoing the typed name
-          // must not count. A false negative here is safe: retrying the save
-          // finds the created list and takes the listAlreadySelected path.
-          listCreated = /已儲存|Saved/.test(bodyAfterCreate) && bodyAfterCreate.includes(listName);
+          // Verified state, not the click: the 已儲存於「清單」 banner names
+          // the exact list, which an error dialog echoing the typed name (or
+          // the address, for county lists) can't produce. A false negative
+          // here is safe: retrying the save finds the created list and takes
+          // the listAlreadySelected path.
+          const deadline = Date.now() + 6000;
+          while (!listCreated && Date.now() < deadline) {
+            await sleep(400);
+            listCreated = listSelectionVerified({ rowVisible: false, ariaChecked: null, bodyText: await getBody(page), listName });
+          }
           listClicked = true;
           listSelected = listCreated;
           console.error(`created new list and saved: ${listName} (verified=${listCreated})`);

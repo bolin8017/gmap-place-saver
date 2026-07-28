@@ -6,13 +6,33 @@ import { runWithRetry, saveFailureArtifacts } from '../run-utils.js';
 import {
   detailActionSelectors, withMapsLanguage, clickFirst, getBody, waitForAny, placeFound, isMissingBrowserError,
 } from './save.js';
+import { waitForBodyIncludes } from './maps-ui.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The left-rail nav button is also labeled 已儲存/Saved and precedes the place
+// detail panel in the DOM, so every selector must stay inside div[role="main"]
+// or the click navigates to the saved-lists page instead of opening the dialog.
+export const savedButtonSelectors = [
+  'div[role="main"] button:has-text("已儲存")',
+  'div[role="main"] button[aria-label*="已儲存"]',
+  'div[role="main"] button:has-text("Saved")',
+  'div[role="main"] button[aria-label*="Saved"]',
+];
 
 // Mirrors assessSaveSuccess: only VERIFIED facts count. listUnchecked must be
 // the aria-checked state read back after the click, never the click attempt.
 export function assessUnsaveSuccess({ placeFoundLikely, dialogOpened, listUnchecked, signInVisible }) {
   return Boolean(placeFoundLikely && dialogOpened && listUnchecked && !signInVisible);
+}
+
+// Clicking the checked row usually closes the menu immediately, so the row's
+// aria-checked read-back goes stale. Removal still has to come from read-back
+// state: the row itself while the menu is open, otherwise the 已儲存於「清單」
+// banner must be gone from the refreshed detail panel.
+export function listRemovalVerified({ rowVisible, ariaChecked, bodyText, listName }) {
+  if (rowVisible) return ariaChecked === 'false';
+  return !bodyText.includes(`已儲存於「${listName}」`);
 }
 
 export async function unsavePlace({
@@ -50,16 +70,13 @@ export async function unsavePlace({
     await runWithRetry(() => page.goto(withMapsLanguage(placeUrl), { waitUntil: 'domcontentloaded', timeout: 60000 }), { retries: 1 });
     await waitForAny(page, detailActionSelectors, 'place detail action buttons', 25000);
 
-    const body = await getBody(page);
+    // Same flake save.js hit: waitForAny fires before the detail panel
+    // finishes rendering, so give the expected name time to appear.
+    const body = await waitForBodyIncludes(page, expectedName, { timeout: 10000 });
     const placeFoundLikely = placeFound(body, expectedName, expectedAddress);
     const signInVisible = await page.locator('a:has-text("Sign in"), button:has-text("Sign in"), a:has-text("登入"), button:has-text("登入")').first().isVisible({ timeout: 2000 }).catch(() => false);
 
-    const savedClicked = await clickFirst(page, [
-      'button:has-text("已儲存")',
-      'button[aria-label*="已儲存"]',
-      'button:has-text("Saved")',
-      'button[aria-label*="Saved"]',
-    ], 'saved button', 6000);
+    const savedClicked = await clickFirst(page, savedButtonSelectors, 'saved button', 6000);
 
     let dialogOpened = false;
     let listWasChecked = false;
@@ -76,12 +93,20 @@ export async function unsavePlace({
         if (before === 'true') {
           listWasChecked = true;
           await row.loc.click({ timeout: 8000, force: true });
-          await sleep(700);
-          const after = await row.loc.getAttribute('aria-checked').catch(() => null);
-          listUnchecked = after === 'false';
+          const deadline = Date.now() + 6000;
+          while (!listUnchecked && Date.now() < deadline) {
+            await sleep(400);
+            const rowVisible = await row.loc.isVisible().catch(() => false);
+            const ariaChecked = rowVisible ? await row.loc.getAttribute('aria-checked').catch(() => null) : null;
+            const bodyText = rowVisible ? '' : await getBody(page);
+            listUnchecked = listRemovalVerified({ rowVisible, ariaChecked, bodyText, listName });
+          }
         } else {
-          // Already off this list: nothing left to undo, count as done.
-          listUnchecked = before === 'false';
+          // Already off this list: nothing left to undo. The row can render
+          // stale right after a save (eventual consistency), so the 已儲存於
+          // banner must agree before counting it as done.
+          const bodyText = await getBody(page);
+          listUnchecked = before === 'false' && !bodyText.includes(`已儲存於「${listName}」`);
         }
         await clickFirst(page, [
           'button:has-text("完成")',
