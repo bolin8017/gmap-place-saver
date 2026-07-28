@@ -84,3 +84,29 @@ test('onboarding locks the users tree to 0o700', async (t) => {
   assert.equal((await fs.stat(store.usersDir)).mode & 0o777, 0o700);
   assert.equal((await fs.stat(home)).mode & 0o777, 0o700);
 });
+
+test('onboarding with shareWith links a second LINE user to the same account', async (t) => {
+  const config = await tmpConfig(t);
+  const store = createUserStore({ config });
+  const OTHER = `U${'b'.repeat(32)}`;
+  const { home } = await onboardUser(USER, '小美', { config });
+  await fs.mkdir(path.join(home, 'profile'), { recursive: true });
+  const shared = await onboardUser(OTHER, '小明', { config, shareWith: USER });
+  // Same home on disk: profile, region config, and history are all shared,
+  // so the pair dedupes against each other and logs in only once.
+  assert.equal(await fs.realpath(shared.home), await fs.realpath(home));
+  assert.equal(await store.isAllowed(OTHER), true);
+  assert.equal((await store.allowlist())[OTHER].name, '小明');
+  assert.equal(await store.isOnboarded(OTHER), true);
+  assert.equal(
+    await fs.realpath(store.userEnv(OTHER).GOOGLE_MAPS_PROFILE),
+    await fs.realpath(store.userEnv(USER).GOOGLE_MAPS_PROFILE),
+  );
+});
+
+test('shareWith rejects an unknown or invalid source user', async (t) => {
+  const config = await tmpConfig(t);
+  const OTHER = `U${'c'.repeat(32)}`;
+  await assert.rejects(() => onboardUser(OTHER, '', { config, shareWith: `U${'d'.repeat(32)}` }), /not onboarded/);
+  await assert.rejects(() => onboardUser(OTHER, '', { config, shareWith: '../oops' }), /invalid LINE user id/);
+});
