@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, listSelectionVerified, listAlreadySavedVerified } from '../src/maps/save.js';
+import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, listSelectionVerified, listAlreadySavedVerified, savePlace } from '../src/maps/save.js';
 
 test('placeFound cannot confirm with an empty expectedName', () => {
   // ''.includes('') is true, so an empty name must be rejected explicitly —
@@ -58,4 +58,15 @@ test('save dialog wait anchors on dialog roles, never free text', () => {
 test('assessSaveSuccess fails on sign-in wall or unfound place', () => {
   assert.equal(assessSaveSuccess({ placeFoundLikely: true, saveClicked: true, listSelected: true, signInVisible: true }), false);
   assert.equal(assessSaveSuccess({ placeFoundLikely: false, saveClicked: true, listSelected: true, signInVisible: false }), false);
+});
+
+test('savePlace refuses a call that names no place', async () => {
+  // A caller whose place arguments got dropped used to reach the browser and
+  // spend ~24s searching Google Maps for the empty string before failing on an
+  // unrelated locator. Nothing downstream can recover a place that was never
+  // passed, so refuse before launching.
+  await assert.rejects(
+    savePlace({ listName: '嘉義行' }, { config: { profile: '/tmp/gmap-profile' } }),
+    /placeUrl or placeQuery/,
+  );
 });

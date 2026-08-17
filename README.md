@@ -175,6 +175,10 @@ restarting the gateway by sending `/reload-mcp` in Hermes.
 | `benchmark_summary` | Summarize resolver/save performance | no |
 | `smoke_check` | Safe diagnostics (node, Playwright, profile, region config) | no |
 
+`save_place` needs `placeUrl` or `placeQuery`, and rejects argument names it does
+not recognise: a misspelled key (`place_url`) fails the call by name instead of
+being dropped, which would leave the save searching for nothing.
+
 ## CLI
 
 ```bash

@@ -38,14 +38,18 @@ server.registerTool('resolve_place', {
 server.registerTool('save_place', {
   title: 'Save place',
   description: 'Save a user-confirmed candidate to the EXACT regional Google Maps list. Set dryRun to verify targeting without changing data. Never call without a confirmed candidate.',
-  inputSchema: {
+  // Strict: every argument that identifies the place is optional, so a
+  // misspelled key (place_url, expected_name) would otherwise be dropped in
+  // silence and the save would run against a blank map. Rejecting the call
+  // names the offending key, which is the only form an agent can act on.
+  inputSchema: z.strictObject({
     placeUrl: z.string().optional(),
     placeQuery: z.string().optional(),
     listName: z.string().describe('Exact saved-list name to save into'),
     expectedName: z.string().optional(),
     expectedAddress: z.string().optional(),
     dryRun: z.boolean().optional(),
-  },
+  }),
 }, async (args) => run(() => savePlace(args, {})));
 
 server.registerTool('attach_note', {
