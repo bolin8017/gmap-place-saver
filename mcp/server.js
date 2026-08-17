@@ -46,7 +46,9 @@ server.registerTool('save_place', {
     placeUrl: z.string().optional(),
     placeQuery: z.string().optional(),
     listName: z.string().describe('Exact saved-list name to save into'),
-    expectedName: z.string().optional(),
+    // Required: the save is confirmed by finding this name on the page, so a
+    // call without it can only ever report failure.
+    expectedName: z.string().describe('Expected place name; the save is only confirmed by finding it on the page'),
     expectedAddress: z.string().optional(),
     dryRun: z.boolean().optional(),
   }),

@@ -153,6 +153,10 @@ export async function savePlace({
   // lacked, naming nothing the caller could act on.
   if (!placeUrl && !placeQuery) throw new Error('placeUrl or placeQuery is required for save');
   expectedName = expectedName || placeQuery.split(/\s+/)[0] || placeQuery;
+  // The save is only ever confirmed by finding this name on the page, and
+  // placeFound rejects an empty one — so without it the run reports failure
+  // however well it goes, after having changed the account anyway.
+  if (!expectedName) throw new Error('savePlace requires expectedName, or a placeQuery to derive it from');
 
   const startNs = process.hrtime.bigint();
   const marks = [];

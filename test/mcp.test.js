@@ -64,6 +64,28 @@ for (const [name, args, expected] of misspelledWriteCalls) {
   });
 }
 
+test('save_place asks for expectedName up front', async () => {
+  // The caller cannot be told after the fact: a save without it always reports
+  // failure, so the schema has to say so before the browser ever opens.
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [serverPath],
+    env: { ...process.env, GOOGLE_MAPS_PROFILE: '' },
+  });
+  const client = new Client({ name: 'gmap-test', version: '0.0.0' });
+  await client.connect(transport);
+  try {
+    const res = await client.callTool({
+      name: 'save_place',
+      arguments: { listName: '嘉義行', placeUrl: 'https://www.google.com/maps/place/x' },
+    }).catch((error) => ({ isError: true, content: [{ type: 'text', text: error.message }] }));
+    assert.ok(res.isError, 'a save with no expectedName must fail the call');
+    assert.match(res.content.map((c) => c.text).join('\n'), /expectedName/);
+  } finally {
+    await client.close();
+  }
+});
+
 test('list_regions tool returns the example mapping when configured', async () => {
   const regionConfig = path.join(here, '..', 'config', 'region-lists.example.json');
   const transport = new StdioClientTransport({
