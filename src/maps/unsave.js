@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 import { loadConfig } from '../config.js';
 import { runWithRetry, saveFailureArtifacts } from '../run-utils.js';
 import {
-  detailActionSelectors, withMapsLanguage, clickFirst, getBody, waitForAny, placeFound, isMissingBrowserError,
+  detailActionSelectors, withMapsLanguage, clickFirst, getBody, waitForAny, placeFound, signInRequired, isMissingBrowserError,
 } from './save.js';
 import { waitForBodyIncludes } from './maps-ui.js';
 
@@ -74,7 +74,8 @@ export async function unsavePlace({
     // finishes rendering, so give the expected name time to appear.
     const body = await waitForBodyIncludes(page, expectedName, { timeout: 10000 });
     const placeFoundLikely = placeFound(body, expectedName, expectedAddress);
-    const signInVisible = await page.locator('a:has-text("Sign in"), button:has-text("Sign in"), a:has-text("登入"), button:has-text("登入")').first().isVisible({ timeout: 2000 }).catch(() => false);
+    const signInControlVisible = await page.locator('a:has-text("Sign in"), button:has-text("Sign in"), a:has-text("登入"), button:has-text("登入")').first().isVisible({ timeout: 2000 }).catch(() => false);
+    const signInVisible = signInRequired({ url: page.url(), signInControlVisible });
 
     const savedClicked = await clickFirst(page, savedButtonSelectors, 'saved button', 6000);
 

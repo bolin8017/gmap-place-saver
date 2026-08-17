@@ -113,6 +113,15 @@ export async function waitForAny(page, selectors, label, timeout = 15000) {
   return null;
 }
 
+// An expired session is bounced to accounts.google.com, where nothing matches
+// an a/button reading 登入 — the page IS the sign-in, so the control lookup
+// comes back false and the run reads as an ordinary failure. The URL says it
+// plainly, and the LINE bot's session-expired reply and admin alert both hang
+// off this flag.
+export function signInRequired({ url = '', signInControlVisible = false } = {}) {
+  return Boolean(signInControlVisible) || /^https:\/\/accounts\.google\.com\//.test(url);
+}
+
 export function isMissingBrowserError(error) {
   return /Executable doesn'?t exist|playwright install|please run the following command/i.test(error?.message || '');
 }
@@ -336,7 +345,8 @@ export async function savePlace({
     const finalBody = await getBody(page);
     const finalUrl = page.url();
     const finalTitle = await page.title().catch(() => '');
-    const signInVisible = await page.locator('a:has-text("Sign in"), button:has-text("Sign in"), a:has-text("登入"), button:has-text("登入")').first().isVisible({ timeout: 2000 }).catch(() => false);
+    const signInControlVisible = await page.locator('a:has-text("Sign in"), button:has-text("Sign in"), a:has-text("登入"), button:has-text("登入")').first().isVisible({ timeout: 2000 }).catch(() => false);
+    const signInVisible = signInRequired({ url: finalUrl, signInControlVisible });
     const savedIndicator = /已儲存|Saved/.test(finalBody);
     const listNameVisible = finalBody.includes(listName);
 
