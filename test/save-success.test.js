@@ -89,6 +89,17 @@ test('create-list anchors cannot fire on the page behind the dialog', () => {
   }
 });
 
+test('savePlace refuses a call whose success it could never confirm', async () => {
+  // placeFound() rejects an empty expectedName by design, so a save with no
+  // name and no placeQuery to derive one from reports failure however well it
+  // actually goes. One real run selected the list on the right place and still
+  // came back successLikely false. unsavePlace has guarded this from the start.
+  await assert.rejects(
+    savePlace({ placeUrl: 'https://www.google.com/maps/place/x', listName: '嘉義行' }, { config: { profile: '/tmp/gmap-profile' } }),
+    /expectedName/,
+  );
+});
+
 test('savePlace refuses a call that names no place', async () => {
   // A caller whose place arguments got dropped used to reach the browser and
   // spend ~24s searching Google Maps for the empty string before failing on an

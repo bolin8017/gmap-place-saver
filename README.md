@@ -179,7 +179,8 @@ The three tools that change the account — `save_place`, `attach_note`,
 `clear_note` — reject argument names they do not recognise: a misspelled key
 (`place_url`) fails the call by name instead of being dropped, which would leave
 the save searching for nothing or the note aimed at a sibling place.
-`save_place` also needs `placeUrl` or `placeQuery`.
+`save_place` also needs `expectedName` — the save is confirmed only by finding
+that name on the page — and `placeUrl` or `placeQuery` to open it.
 
 ## CLI
 
