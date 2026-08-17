@@ -20,17 +20,28 @@ export const detailActionSelectors = [
 // County list names (苗栗, 彰化…) always appear in the place address, so the
 // dialog wait must anchor on dialog roles — a free-text or role="button"
 // matcher fires before the menu renders and the row click races it.
+// The saved-list editor that sits behind the dialog has its own 「新增清單說明」
+// field and 「完成」 button, and :has-text matches substrings — so a bare
+// button:has-text("新增清單") fires on that page. A run that never opened the
+// dialog clicked one and created an empty 「未命名清單」 in the account. Scope
+// every create-list anchor to the dialog, and match its text exactly.
+export function newListSelectors() {
+  return ['div[role="menu"]', 'div[role="dialog"]'].flatMap((root) => [
+    `${root} div[role="menuitem"]:text-is("新增清單")`,
+    `${root} button:text-is("新增清單")`,
+    `${root} div[role="menuitem"]:text-is("New list")`,
+    `${root} button:text-is("New list")`,
+  ]);
+}
+
+// 完成/Done are page chrome too, so the dialog is recognised by its list rows
+// or its create-list entry — never by a button the page behind it also has.
 export function saveDialogWaitSelectors(listName) {
   return [
     `div[role="menuitemradio"]:has-text("${listName}")`,
     `div[role="menuitemcheckbox"]:has-text("${listName}")`,
     `div[role="checkbox"]:has-text("${listName}")`,
-    'div[role="menuitem"]:has-text("新增清單")',
-    'button:has-text("新增清單")',
-    'div[role="menuitem"]:has-text("New list")',
-    'button:has-text("New list")',
-    'button:has-text("完成")',
-    'button:has-text("Done")',
+    ...newListSelectors(),
   ];
 }
 
@@ -238,7 +249,10 @@ export async function savePlace({
       }
     }
 
-    await waitForAny(page, saveDialogWaitSelectors(listName), 'save list dialog', 12000);
+    // waitForAny reports a timeout by returning null. Ignoring that let a run
+    // whose dialog never opened go on clicking whatever the page underneath
+    // happened to offer.
+    const saveDialogVisible = await waitForAny(page, saveDialogWaitSelectors(listName), 'save list dialog', 12000);
     mark('save-dialog-visible');
 
     let listClicked = false;
@@ -251,7 +265,7 @@ export async function savePlace({
       `div[role="checkbox"]:has-text("${listName}")`,
     ];
     const clickableListRow = page.locator(listRowSelectors.join(', ')).first();
-    if (await clickableListRow.isVisible({ timeout: 8000 }).catch(() => false)) {
+    if (saveDialogVisible && await clickableListRow.isVisible({ timeout: 8000 }).catch(() => false)) {
       const ariaCheckedBefore = await clickableListRow.getAttribute('aria-checked').catch(() => null);
       if (listAlreadySavedVerified({ rowChecked: ariaCheckedBefore === 'true', chipAlreadySaved })) {
         listAlreadySelected = true;
@@ -272,16 +286,11 @@ export async function savePlace({
         console.error(`clicked save-dialog list row: ${listName} (verified=${listSelected})`);
       }
     }
-    if (!listClicked) {
+    if (saveDialogVisible && !listClicked) {
       // The county list may simply not exist yet (lists are created lazily,
       // one per county on first save). "新增清單" in the save dialog both
       // creates the list and saves the place into it.
-      const newListClicked = await clickFirst(page, [
-        'div[role="menuitem"]:has-text("新增清單")',
-        'button:has-text("新增清單")',
-        'div[role="menuitem"]:has-text("New list")',
-        'button:has-text("New list")',
-      ], 'new list button', 4000);
+      const newListClicked = await clickFirst(page, newListSelectors(), 'new list button', 4000);
       if (newListClicked) {
         const nameBox = page.locator('input[aria-label*="清單名稱"], input[aria-label*="List name"], div[role="dialog"] input[type="text"]').first();
         await nameBox.waitFor({ state: 'visible', timeout: 8000 });

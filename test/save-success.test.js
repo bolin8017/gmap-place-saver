@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, listSelectionVerified, listAlreadySavedVerified, savePlace } from '../src/maps/save.js';
+import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, newListSelectors, listSelectionVerified, listAlreadySavedVerified, savePlace } from '../src/maps/save.js';
 
 test('placeFound cannot confirm with an empty expectedName', () => {
   // ''.includes('') is true, so an empty name must be rejected explicitly —
@@ -58,6 +58,22 @@ test('save dialog wait anchors on dialog roles, never free text', () => {
 test('assessSaveSuccess fails on sign-in wall or unfound place', () => {
   assert.equal(assessSaveSuccess({ placeFoundLikely: true, saveClicked: true, listSelected: true, signInVisible: true }), false);
   assert.equal(assessSaveSuccess({ placeFoundLikely: false, saveClicked: true, listSelected: true, signInVisible: false }), false);
+});
+
+test('create-list anchors cannot fire on the page behind the dialog', () => {
+  // The saved-list editor carries its own 「新增清單說明」 field and 「完成」
+  // button, and :has-text matches substrings — so a bare
+  // button:has-text("新增清單") fires on that page. A run that never opened the
+  // save dialog clicked exactly that and left an empty 「未命名清單」 in the
+  // account before failing. Scope to the dialog, and match the text exactly.
+  for (const selector of newListSelectors()) {
+    assert.match(selector, /^div\[role="(menu|dialog)"\] /, selector);
+    assert.match(selector, /:text-is\(/, selector);
+    assert.doesNotMatch(selector, /:has-text\(/, selector);
+  }
+  for (const selector of saveDialogWaitSelectors('嘉義行')) {
+    assert.doesNotMatch(selector, /^button:has-text/, selector);
+  }
 });
 
 test('savePlace refuses a call that names no place', async () => {
