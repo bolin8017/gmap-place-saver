@@ -128,6 +128,10 @@ export async function savePlace({
 } = {}, { config = loadConfig() } = {}) {
   if (!config.profile) throw new Error('GOOGLE_MAPS_PROFILE not set');
   if (!dryRun && !listName) throw new Error('listName is required for save');
+  // Without either one there is nothing to open: the run used to search Maps
+  // for the empty string and then fail on whatever locator the blank page
+  // lacked, naming nothing the caller could act on.
+  if (!placeUrl && !placeQuery) throw new Error('placeUrl or placeQuery is required for save');
   expectedName = expectedName || placeQuery.split(/\s+/)[0] || placeQuery;
 
   const startNs = process.hrtime.bigint();

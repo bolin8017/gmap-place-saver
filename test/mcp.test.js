@@ -29,6 +29,26 @@ test('MCP server starts over stdio and lists all tools', async () => {
   }
 });
 
+test('save_place rejects misspelled argument names instead of dropping them', async () => {
+  // Real failure: an agent sent place_url/expected_name (snake_case). Only
+  // listName survived the schema, so the save ran against a blank map and
+  // reported a locator timeout that named nothing the caller could fix.
+  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath] });
+  const client = new Client({ name: 'gmap-test', version: '0.0.0' });
+  await client.connect(transport);
+  try {
+    const res = await client.callTool({
+      name: 'save_place',
+      arguments: { listName: '嘉義行', place_url: 'https://www.google.com/maps/search/?api=1&query=x', expected_name: '花媽包飯糰' },
+    }).catch((error) => ({ isError: true, content: [{ type: 'text', text: error.message }] }));
+    assert.ok(res.isError, 'unknown argument names must fail the call');
+    const text = res.content.map((c) => c.text).join('\n');
+    assert.match(text, /place_url/);
+  } finally {
+    await client.close();
+  }
+});
+
 test('list_regions tool returns the example mapping when configured', async () => {
   const regionConfig = path.join(here, '..', 'config', 'region-lists.example.json');
   const transport = new StdioClientTransport({
