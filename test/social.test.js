@@ -30,6 +30,37 @@ test('extractPlaceName prefers labelled place name over address', () => {
   assert.equal(extractPlaceName(caption, addr), '小熊菓子 新北斗店');
 });
 
+// Caption shape from a real resolve: the phone sits on the line above the
+// address. It produced address "801\n嘉義縣…" (the newline reached the Maps URL
+// as %0A) and placeName "0903 995 801" — reported at confidence high, which
+// skips the browser check entirely.
+const phoneAboveAddress = '古早味早餐\n0903 995 801\n嘉義縣六腳鄉蘇厝村蘇厝寮145-31號\n#說說咖啡';
+
+test('a postal-code prefix never reaches across a line break', () => {
+  // The optional 3-digit prefix used \s*, and \s matches a newline, so the tail
+  // of the phone number came back glued to the address.
+  assert.equal(extractAddress(phoneAboveAddress), '嘉義縣六腳鄉蘇厝村蘇厝寮145-31號');
+});
+
+test('extractPlaceName never takes a bare phone number as the name', () => {
+  // The line above the address is the weakest heuristic and its filter only
+  // rejected lines saying 地址/營業/電話/時間/公休 — a bare run of digits passed.
+  // Returning nothing is the right answer here: an address alone resolves at
+  // medium confidence, which asks rather than saving under a wrong name.
+  assert.equal(extractPlaceName(phoneAboveAddress, extractAddress(phoneAboveAddress)), '');
+  // A real name on that line still comes through.
+  const named = '古早味早餐\n蘇厝寮小館\n嘉義縣六腳鄉蘇厝村蘇厝寮145-31號';
+  assert.equal(extractPlaceName(named, extractAddress(named)), '蘇厝寮小館');
+});
+
+test('extractPlaceName rejects a name left behind as punctuation', () => {
+  // The labelled branch drops everything from 電話/訂位 onward, which can leave
+  // a lone separator standing as the whole name — the resolver cache holds an
+  // entry whose placeName is 「：」.
+  const caption = '地點：· 電話：05-2345678\n嘉義市西區培元里西門街46號';
+  assert.equal(extractPlaceName(caption, extractAddress(caption)), '');
+});
+
 test('makeMapsQuery combines address and name; mapsSearchUrl encodes it', () => {
   const q = makeMapsQuery('小熊菓子', '彰化縣北斗鎮民族路82號', '');
   assert.equal(q, '彰化縣北斗鎮民族路82號 小熊菓子');

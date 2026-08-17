@@ -129,6 +129,11 @@ export function stripSocialNoise(line) {
     .trim();
 }
 
+// A name has to contain a letter. Captions put phone numbers, prices and lone
+// separators exactly where a name belongs, and each of those has come back from
+// here as one — a resolve reported 「0903 995 801」, another 「：」.
+const hasLetters = (value) => /\p{L}/u.test(value);
+
 function stripPlaceLabel(value) {
   return stripSocialNoise(value).replace(/^(?:店名|餐廳|店家|地點|地址|位置)[:：\s]*/i, '').trim();
 }
@@ -137,7 +142,10 @@ export function extractAddress(text) {
   const lines = normalize(text).split('\n').map(stripSocialNoise).filter(Boolean);
   const patterns = [
     /(?:地址|地點|ADD|Address|📍|🏠|位置)[:：\s]*([^\n#。|｜]+(?:市|縣)[^\n#。|｜]*(?:路|街|大道|巷|弄|號)[^\n#。|｜]*)/i,
-    /((?:\d{3}\s*)?(?:台|臺|高雄|嘉義|台南|臺南|台東|臺東|彰化|雲林|花蓮|苗栗|宜蘭|屏東|新北|台北|臺北)[^\n#。|｜]{0,45}(?:市|縣|區|鄉|鎮)[^\n#。|｜]{0,80}(?:路|街|大道|巷|弄|號)[^\n#。|｜]*)/,
+    // The postal code stays on the address's own line: \s matches a newline, so
+    // a phone number ending in three digits on the line above was captured as
+    // the prefix, and the break travelled into the Maps URL as %0A.
+    /((?:\d{3}[ \t]*)?(?:台|臺|高雄|嘉義|台南|臺南|台東|臺東|彰化|雲林|花蓮|苗栗|宜蘭|屏東|新北|台北|臺北)[^\n#。|｜]{0,45}(?:市|縣|區|鄉|鎮)[^\n#。|｜]{0,80}(?:路|街|大道|巷|弄|號)[^\n#。|｜]*)/,
     /(香港[^\n#。|｜]{2,80})/,
   ];
   for (const pattern of patterns) {
@@ -157,14 +165,17 @@ export function extractPlaceName(text, address) {
     const match = normalize(text).match(pattern);
     if (match?.[1]) {
       const value = stripPlaceLabel(match[1]).replace(/(?:地址|營業|電話|訂位).*$/g, '').trim();
-      if (value && !address.includes(value) && !/(地址|營業|電話|時間)/.test(value)) return value;
+      if (value && hasLetters(value) && !address.includes(value) && !/(地址|營業|電話|時間)/.test(value)) return value;
     }
   }
   const addressLine = address ? lines.find((line) => line.includes(address) || address.includes(line)) : '';
   const addressIdx = addressLine ? lines.indexOf(addressLine) : -1;
   if (addressIdx > 0) {
     const before = lines[addressIdx - 1].replace(/^[@#]+/, '').trim();
-    if (before.length >= 2 && before.length <= 35 && !/(地址|營業|電話|時間|公休)/.test(before)) return before;
+    // Captions put the phone, the price or the hours right above the address as
+    // often as the name, and rejecting the labelled ones is not enough: a bare
+    // 0903 995 801 carries no label at all.
+    if (hasLetters(before) && before.length >= 2 && before.length <= 35 && !/(地址|營業|電話|時間|公休)/.test(before)) return before;
   }
   const hashtag = [...normalize(text).matchAll(/#([\p{Script=Han}A-Za-z0-9_・．\.\-]{2,30})/gu)]
     .map((m) => m[1])
