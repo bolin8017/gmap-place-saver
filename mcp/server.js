@@ -55,7 +55,10 @@ server.registerTool('save_place', {
 server.registerTool('attach_note', {
   title: 'Attach note',
   description: 'Attach a source/recommendation note to the EXACT saved place, opened via its saved list. If exact targeting is not provably safe (the note field cannot be matched to the place by nearest-ancestor name), write a local sidecar record instead (mode safeAttachOrSidecar) or refuse. A non-empty existing note is never replaced unless overwrite is true; previousText is always returned.',
-  inputSchema: {
+  // Strict, as for save_place: a dropped negativeNames weakens the guard that
+  // keeps the note off a sibling place, and a dropped overwrite silently
+  // reverses the caller's decision about an existing note.
+  inputSchema: z.strictObject({
     expectedName: z.string().describe('Expected place name; must appear on the saved place card in the list'),
     listName: z.string().describe('The saved list the place is in; the note is opened through this list'),
     expectedAddress: z.string().optional(),
@@ -65,18 +68,20 @@ server.registerTool('attach_note', {
     negativeNames: z.array(z.string()).optional(),
     overwrite: z.boolean().optional().describe('Replace a non-empty existing note (default false: preserved, new note goes to sidecar/refused)'),
     mode: z.enum(['safeAttachOrSidecar', 'attachOnly']).optional(),
-  },
+  }),
 }, async ({ mode, ...payload }) => run(() => attachNote(payload, { mode })));
 
 server.registerTool('clear_note', {
   title: 'Clear note',
   description: 'Clear (remove) the note on the EXACT saved place, opened via its saved list. Uses the same nearest-ancestor safety guard as attach_note and returns previousText so the change can be undone. Never clears a sibling place.',
-  inputSchema: {
+  // Strict for the same reason, and this one removes text: expectedAddress and
+  // negativeNames are the whole of its aim.
+  inputSchema: z.strictObject({
     expectedName: z.string().describe('Expected place name; must appear on the saved place card in the list'),
     listName: z.string().describe('The saved list the place is in'),
     expectedAddress: z.string().optional(),
     negativeNames: z.array(z.string()).optional(),
-  },
+  }),
 }, async (payload) => run(() => clearNote(payload, {})));
 
 server.registerTool('list_regions', {

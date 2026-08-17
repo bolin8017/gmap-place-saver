@@ -29,25 +29,40 @@ test('MCP server starts over stdio and lists all tools', async () => {
   }
 });
 
-test('save_place rejects misspelled argument names instead of dropping them', async () => {
-  // Real failure: an agent sent place_url/expected_name (snake_case). Only
-  // listName survived the schema, so the save ran against a blank map and
-  // reported a locator timeout that named nothing the caller could fix.
-  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath] });
-  const client = new Client({ name: 'gmap-test', version: '0.0.0' });
-  await client.connect(transport);
-  try {
-    const res = await client.callTool({
-      name: 'save_place',
-      arguments: { listName: '嘉義行', place_url: 'https://www.google.com/maps/search/?api=1&query=x', expected_name: '花媽包飯糰' },
-    }).catch((error) => ({ isError: true, content: [{ type: 'text', text: error.message }] }));
-    assert.ok(res.isError, 'unknown argument names must fail the call');
-    const text = res.content.map((c) => c.text).join('\n');
-    assert.match(text, /place_url/);
-  } finally {
-    await client.close();
-  }
-});
+// Every tool that changes the account has optional arguments that decide what
+// it touches, so a key the schema does not recognise must fail the call by
+// name. save_place showed the cost: an agent sent place_url/expected_name, only
+// listName survived, and the save ran against a blank map and timed out on a
+// locator that named nothing the caller could act on. The note tools lose
+// safety the same way — negativeNames is what keeps a note off a sibling place,
+// and overwrite decides whether an existing note survives.
+const misspelledWriteCalls = [
+  ['save_place', { listName: '嘉義行', place_url: 'https://www.google.com/maps/search/?api=1&query=x', expected_name: '花媽包飯糰' }, /place_url/],
+  ['attach_note', { expectedName: '花媽包飯糰', listName: '嘉義行', note_text: '早餐店' }, /note_text/],
+  ['clear_note', { expectedName: '花媽包飯糰', listName: '嘉義行', negative_names: ['隔壁的店'] }, /negative_names/],
+];
+
+for (const [name, args, expected] of misspelledWriteCalls) {
+  test(`${name} rejects misspelled argument names instead of dropping them`, async () => {
+    // Blank profile so that a regression here fails on the config check rather
+    // than driving the real logged-in browser.
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [serverPath],
+      env: { ...process.env, GOOGLE_MAPS_PROFILE: '' },
+    });
+    const client = new Client({ name: 'gmap-test', version: '0.0.0' });
+    await client.connect(transport);
+    try {
+      const res = await client.callTool({ name, arguments: args })
+        .catch((error) => ({ isError: true, content: [{ type: 'text', text: error.message }] }));
+      assert.ok(res.isError, `${name} must fail on an unknown argument name`);
+      assert.match(res.content.map((c) => c.text).join('\n'), expected);
+    } finally {
+      await client.close();
+    }
+  });
+}
 
 test('list_regions tool returns the example mapping when configured', async () => {
   const regionConfig = path.join(here, '..', 'config', 'region-lists.example.json');
