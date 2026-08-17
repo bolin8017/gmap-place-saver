@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, newListSelectors, listSelectionVerified, listAlreadySavedVerified, savePlace } from '../src/maps/save.js';
+import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, newListSelectors, listSelectionVerified, listAlreadySavedVerified, signInRequired, savePlace } from '../src/maps/save.js';
 
 test('placeFound cannot confirm with an empty expectedName', () => {
   // ''.includes('') is true, so an empty name must be rejected explicitly —
@@ -58,6 +58,19 @@ test('save dialog wait anchors on dialog roles, never free text', () => {
 test('assessSaveSuccess fails on sign-in wall or unfound place', () => {
   assert.equal(assessSaveSuccess({ placeFoundLikely: true, saveClicked: true, listSelected: true, signInVisible: true }), false);
   assert.equal(assessSaveSuccess({ placeFoundLikely: false, saveClicked: true, listSelected: true, signInVisible: false }), false);
+});
+
+test('an expired session is recognised by the sign-in URL, not only a 登入 link', () => {
+  // Two real runs ended on accounts.google.com with the title 登入 - Google 帳戶
+  // and still reported signInVisible false: on the account chooser nothing is
+  // an a/button reading 登入 — the page IS the sign-in. The LINE bot's
+  // session-expired reply and its admin alert both hang off this flag.
+  assert.equal(signInRequired({ url: 'https://accounts.google.com/v3/signin/accountchooser?continue=x' }), true);
+  assert.equal(signInRequired({ url: 'https://www.google.com/maps/place/x', signInControlVisible: true }), true);
+  assert.equal(signInRequired({ url: 'https://www.google.com/maps/place/x' }), false);
+  // The host appearing inside a query must not count as a redirect to it.
+  assert.equal(signInRequired({ url: 'https://www.google.com/maps/search/?api=1&query=accounts.google.com' }), false);
+  assert.equal(signInRequired(), false);
 });
 
 test('create-list anchors cannot fire on the page behind the dialog', () => {
