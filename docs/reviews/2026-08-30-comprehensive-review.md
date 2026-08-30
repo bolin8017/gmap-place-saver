@@ -191,3 +191,116 @@ noted; one batch = one concern = one PR.
 6. **`chore: dedupe race, pending hygiene, unsave tool, env docs`** —
    line-3, line-4, maps-2, cfg-1. Small and independent; split out if it
    grows past ~150 lines.
+
+---
+
+# Addendum — 2026-08-30 (second pass)
+
+The pass above was `quick`: dimensions 1–3 over the riskiest subsystems. This
+addendum covers what it left out — `src/maps/note.js`, `scripts/login.js`,
+`scripts/login-server.sh`, `src/recommendation.js`, `src/storage/sidecar.js`,
+and dimensions 4–7. Same rules: verified at the cited lines, `[tested]` where
+reproduced.
+
+## What running the fixes taught us
+
+**ops-6 (H) `[tested]` — found by running the fix, not by reviewing it.**
+`line/tunnel.js` — the give-up path added in #34 worked in every respect
+except the one that mattered: it exited **0**. cloudflared handles SIGTERM
+gracefully and exits 0, and that code was propagated straight through, so
+systemd's `Restart=on-failure` saw a clean exit and did not restart. Every
+give-up would have torn the tunnel down and left it down — turning a
+recoverable outage into a permanent one, which is worse than the bug #34 set
+out to fix. Reproduced live with an isolated instance and a deliberately
+invalid LINE token (exit 0), fixed, and re-run (exit 1). Shipped as #39.
+
+The lesson generalises: the unit tests asserted that the tear-down was
+*ordered*, which was true. What none of them could see was what the service
+manager made of the result. Any fix whose payoff is "the supervisor restarts"
+needs one live run before it is believed.
+
+## Findings
+
+### login — scripts/login-server.sh, scripts/login.js
+
+- **sec-1 (M) `[security]` `[tested]`** — `scripts/login-server.sh:81` — the
+  one-time VNC password is passed to `x11vnc -storepasswd` as a **command-line
+  argument**, so it appears in `/proc/<pid>/cmdline` — which is mode
+  `-r--r--r--`, and `/proc` here is mounted with no `hidepid`. Any local user
+  polling `ps` during that instant reads the password, and x11vnc is started
+  `-forever -shared` (`login-server.sh:94`), so they can then attach to the VNC session and watch or
+  drive the Google sign-in. The script's own header claims the opposite:
+  "the VNC server with a random one-time password, so other local users on a
+  shared server cannot watch or drive the login session." Verified: a process
+  spawned with a secret in argv was read back in full from another shell, and
+  `/proc` carries no `hidepid` option. Window is short (`-storepasswd` exits
+  immediately) but the attacker controls the polling rate.
+  Fix direction: keep the password out of argv — `x11vnc -passwdfile <file>`
+  reads a plaintext password from a file, and the script already creates
+  `mktemp` files at 0600. **Not fixed here: x11vnc is not installed on this
+  machine, so no proposed fix could be verified. It must be tried on the
+  login server itself before being believed.**
+- **sec-2 (L) `[security]` `[tested]`** — `scripts/login-server.sh:41` —
+  `mkdir -p "$PROFILE"` pre-creates the browser profile directory at the
+  umask default (0775 under this machine's umask 002), and Chromium does
+  **not** tighten a directory that already exists — verified by pre-creating
+  one at 775, launching a persistent context into it, and finding it still
+  775 afterwards. `line/user-store.js:72-73,104-106` is careful to chmod 0700 for
+  LINE user homes; this path is not.
+  Scope, measured rather than assumed: the session itself does **not** leak —
+  all 5,352 files in a real profile are 0600, including `Cookies`,
+  `Login Data`, `Local State`, `Web Data` and `Preferences`. What becomes
+  readable to other local users is the directory listing plus seven 0664
+  files, among them `Default/Accounts/Avatar Images/<gaia-id>` and
+  `Default/Google Profile Picture.png` — i.e. the identity of the Google
+  account, not access to it. Hence L, not H.
+  Fix: `chmod 700 "$PROFILE"` immediately after the mkdir, mirroring
+  `onboardUser`.
+
+### maps — src/maps/note.js
+
+- **note-1 (L)** — `src/maps/note.js:258-260` — `attachNote`'s catch-all funnels
+  every exception into `fallback('exception: …')`, which under the default
+  `safeAttachOrSidecar` mode returns `{ ok: true, noteStatus: 'sidecar' }`.
+  `actionFailed` only inspects `ok`/`successLikely`, so a Playwright crash
+  reaches the CLI as exit 0 and MCP as a non-error result. The sidecar record
+  really is written and `reason` really does say `exception: …`, so nothing is
+  fabricated — but a caller checking the documented failure signal cannot tell
+  a safely-refused note from a browser that died. Fix direction: keep `ok`
+  true (the sidecar is a real outcome) and add a distinct `noteStatus` for the
+  crash path, or have `actionFailed` treat an `exception:` reason as failure.
+- **note-2 (L)** — `src/maps/note.js:70-95,214,237` — `openSavedList` is called
+  twice per attach (once to write, once to verify) and each call re-navigates
+  to Maps and re-opens the list behind four fixed `waitForTimeout` sleeps
+  totalling ~3.5s, plus up to 10 scroll rounds at 700ms in
+  `findExactNoteInList` (`note.js:100-108`). Nothing is wrong; it is simply the slowest path in
+  the project and the one least protected by tests. Noted for whoever next
+  looks at attach latency.
+
+### Dimensions 4–7
+
+- **Cross-platform (4)** — no findings. Single runtime (Node ≥22 on Linux);
+  `note.js:231,310` already branches `Meta+A`/`Control+A` for macOS, and
+  `login-server.sh` documents its Debian/Ubuntu prerequisites and allows every
+  tool path to be overridden by env.
+- **Test quality (5)** — one observation, no finding. Every extracted pure
+  predicate is tested (178 tests). What is untested by construction is the
+  browser choreography in `note.js`, `save.js`, `unsave.js` and
+  `candidate.js`, and `login-server.sh` beyond `bash -n`. That is a
+  deliberate house style — no test fakes a Playwright page — and ops-6 above
+  is the reminder of what it cannot catch.
+- **CI & tooling (6)** — no findings. `npm test` runs the suite plus
+  `node --check` over every entry point and `bash -n` over the shell script,
+  on Node 22 and 24.
+- **Security basics (7)** — sec-1 and sec-2 above. Otherwise unchanged from
+  the first pass: no secrets tracked, LINE ids validated before use as path
+  segments, webhook signatures verified before parsing, 1 MB body cap.
+
+## Roadmap (addendum)
+
+7. **`fix(login-server): keep the profile directory private`** — sec-2.
+   One `chmod`, verifiable here. Small.
+8. **`fix(login-server): keep the VNC password out of argv`** — sec-1.
+   Needs a machine with x11vnc to verify; do not merge on reasoning alone.
+9. **`fix(note): distinguish a crashed attach from a refused one`** — note-1.
+   Small, and testable through `actionFailed`.
