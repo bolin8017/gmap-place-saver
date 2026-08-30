@@ -82,7 +82,19 @@ export async function onboardUser(userId, name, { config = loadConfig(), templat
     try {
       await fs.symlink(shareWith, home, 'dir');
     } catch (error) {
-      if (error.code !== 'EEXIST') throw error; // re-onboarding keeps the link
+      if (error.code !== 'EEXIST') throw error;
+      // EEXIST only means "already linked" when the path really is that link.
+      // A real directory here is the user's own — never-logged-in — home, and
+      // a link elsewhere is a different Google account. Recording sharesWith
+      // over either claims a share the filesystem does not have, and the
+      // caller goes on saving into a profile nobody signed into.
+      const linkedTo = await fs.readlink(home).catch(() => null);
+      if (linkedTo === null) {
+        throw new Error(`${userId} already has its own home at ${home}; remove it before sharing ${shareWith}'s account`);
+      }
+      if (linkedTo !== shareWith) {
+        throw new Error(`${userId} already shares ${linkedTo}'s account; unlink ${home} before pointing it at ${shareWith}`);
+      }
     }
     const shared = await store.allowlist();
     shared[userId] = { name: name || '', onboardedAt: new Date().toISOString(), sharesWith: shareWith };
