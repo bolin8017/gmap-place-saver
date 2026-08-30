@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, newListSelectors, listSelectionVerified, listAlreadySavedVerified, signInRequired, savePlace } from '../src/maps/save.js';
+import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, newListSelectors, listSelectionVerified, listAlreadySavedVerified, signInRequired, strayListLikely, becameVisible, savePlace } from '../src/maps/save.js';
 
 test('placeFound cannot confirm with an empty expectedName', () => {
   // ''.includes('') is true, so an empty name must be rejected explicitly —
@@ -109,4 +109,40 @@ test('savePlace refuses a call that names no place', async () => {
     savePlace({ listName: '嘉義行' }, { config: { profile: '/tmp/gmap-profile' } }),
     /placeUrl or placeQuery/,
   );
+});
+
+test('clicking 新增清單 without a created list leaves a stray list behind', () => {
+  // Observed live on 2026-08-17: 「新增清單」 opened a list editor on an
+  // already-created 「未命名清單」 instead of asking for a name, and the run
+  // threw. The account had changed; the caller was told only "exception".
+  assert.equal(strayListLikely({ newListClicked: true, listCreated: false }), true);
+});
+
+test('a list that was actually created is not a stray list', () => {
+  assert.equal(strayListLikely({ newListClicked: true, listCreated: true }), false);
+});
+
+test('a save into an existing list never reports a stray list', () => {
+  assert.equal(strayListLikely({ newListClicked: false, listCreated: false }), false);
+  assert.equal(strayListLikely({}), false);
+});
+
+test('becameVisible reports a rendered element as true', async () => {
+  const locator = { waitFor: async () => undefined };
+  assert.equal(await becameVisible(locator, 8000), true);
+});
+
+test('becameVisible reports a timeout as false instead of throwing', async () => {
+  // This is the whole of the create-list fix: waitFor rejects on timeout, and
+  // letting that escape turned a drifted dialog into an exception — after the
+  // click that may already have created a list.
+  const locator = { waitFor: async () => { throw new Error('locator.waitFor: Timeout 8000ms exceeded.'); } };
+  assert.equal(await becameVisible(locator, 8000), false);
+});
+
+test('becameVisible waits for visibility, for the timeout it is given', async () => {
+  const seen = [];
+  const locator = { waitFor: async (options) => { seen.push(options); } };
+  await becameVisible(locator, 1234);
+  assert.deepEqual(seen, [{ state: 'visible', timeout: 1234 }]);
 });
