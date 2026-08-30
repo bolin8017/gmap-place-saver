@@ -96,7 +96,15 @@ trap cleanup EXIT INT TERM
 
 xauth -q -f "$AUTH_FILE" add "$DISPLAY_ADDR" MIT-MAGIC-COOKIE-1 "$(mcookie)"
 VNC_PASSWORD="$(mcookie | cut -c1-8)"
-"$X11VNC" -storepasswd "$VNC_PASSWORD" "$VNC_PASS_FILE" >/dev/null 2>&1
+# Never as an argument: x11vnc's own manual warns that -passwd puts the
+# password "on the command line where others might see it via ps(1)", and
+# -storepasswd is no different. /proc/<pid>/cmdline is world-readable unless
+# the kernel is mounted with hidepid, so on the shared server this script is
+# written for, any local user polling ps during that instant could read the
+# password and — x11vnc runs -forever -shared — attach to the sign-in session.
+# printf is a shell builtin, so it spawns no process and has no argv of its
+# own; mktemp already created the file 0600.
+printf '%s\n' "$VNC_PASSWORD" > "$VNC_PASS_FILE"
 
 "$XVFB" "$DISPLAY_ADDR" -screen 0 "$SCREEN" -auth "$AUTH_FILE" >"$LOG_DIR/xvfb.log" 2>&1 &
 XVFB_PID=$!
@@ -108,7 +116,7 @@ done
 [[ -e "/tmp/.X11-unix/X${DISPLAY_NUM}" ]] \
   || die_with_log "Xvfb did not create display ${DISPLAY_ADDR} within 10s" "$LOG_DIR/xvfb.log"
 
-"$X11VNC" -display "$DISPLAY_ADDR" -auth "$AUTH_FILE" -localhost -rfbauth "$VNC_PASS_FILE" \
+"$X11VNC" -display "$DISPLAY_ADDR" -auth "$AUTH_FILE" -localhost -passwdfile "$VNC_PASS_FILE" \
   -forever -shared -rfbport "$VNC_PORT" >"$LOG_DIR/x11vnc.log" 2>&1 &
 X11VNC_PID=$!
 for _ in $(seq 1 50); do
