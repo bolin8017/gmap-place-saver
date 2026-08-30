@@ -133,6 +133,13 @@ export function placeFound(body, expectedName, expectedAddress = '') {
   return body.includes(expectedName) && (!expectedAddress || body.includes(expectedAddress));
 }
 
+// waitFor rejects on timeout. Turning that into a boolean is what keeps a
+// drifted dialog a RESULT rather than an exception — the caller can then say
+// which step failed and what it may have left behind.
+export async function becameVisible(locator, timeout) {
+  return locator.waitFor({ state: 'visible', timeout }).then(() => true).catch(() => false);
+}
+
 // Clicking 「新增清單」 can change the account even when the save then fails:
 // Google has been observed creating an empty 「未命名清單」 immediately instead
 // of asking for a name (logs/failures/2026-08-17T12-46-08). A failed create is
@@ -318,8 +325,7 @@ export async function savePlace({
       // than a result, which hid the fact that the click may already have
       // created a list — see strayListLikely above.
       const nameBox = page.locator('input[aria-label*="清單名稱"], input[aria-label*="List name"], div[role="dialog"] input[type="text"]').first();
-      const nameBoxVisible = newListClicked
-        && await nameBox.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+      const nameBoxVisible = newListClicked && await becameVisible(nameBox, 8000);
       if (nameBoxVisible) {
         await nameBox.fill(listName);
         const createClicked = await clickFirst(page, [
