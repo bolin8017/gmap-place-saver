@@ -34,6 +34,85 @@ export async function setWebhookEndpoint(endpoint, { token, fetchImpl = fetch } 
 // hostname can take a few seconds to resolve, so give DNS time to propagate.
 const URL_TIMEOUT_MS = 60000;
 const REGISTER_RETRIES = 5;
+const HEALTH_INTERVAL_MS = 60000;
+const HEALTH_FAILURES_BEFORE_GIVE_UP = 3;
+
+// Remembers which hostname LINE currently points at, so a reconnect that
+// brings a DIFFERENT quick-tunnel hostname is registered instead of dropped.
+// A boolean latch here once left LINE holding a dead endpoint for two weeks:
+// the bot answered nothing and reported nothing.
+export function createWebhookRegistrar({
+  register,
+  retries = REGISTER_RETRIES,
+  sleep: sleepImpl = sleep,
+  retryDelayMs = 3000,
+  log = console.error,
+  onGiveUp = () => {},
+} = {}) {
+  let registeredUrl = null;
+  let inFlightUrl = null;
+
+  async function registerUrl(url) {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await register(`${url}/webhook`);
+        registeredUrl = url;
+        log(`webhook endpoint set to ${url}/webhook`);
+        return url;
+      } catch (error) {
+        log(`attempt ${attempt}: ${error.message}`);
+        // A hostname that never registered must not be remembered as
+        // registered, or the next announcement of it would be skipped.
+        if (attempt >= retries) {
+          onGiveUp(url);
+          return null;
+        }
+        await sleepImpl(retryDelayMs);
+      }
+    }
+  }
+
+  return {
+    get registeredUrl() { return registeredUrl; },
+    // Returns the newly registered URL, or null when the text carried no
+    // hostname the caller has not already acted on.
+    async observe(text) {
+      const url = extractTunnelUrl(text);
+      if (!url || url === registeredUrl || url === inFlightUrl) return null;
+      inFlightUrl = url;
+      try {
+        return await registerUrl(url);
+      } finally {
+        inFlightUrl = null;
+      }
+    },
+  };
+}
+
+// cloudflared stays alive while it reconnect-loops, so its exit code is not a
+// liveness signal and Restart=on-failure never fires. The only honest signal
+// is whether the endpoint LINE actually knows about still answers.
+export function createHealthWatchdog({
+  probe = defaultProbe,
+  failuresBeforeGiveUp = HEALTH_FAILURES_BEFORE_GIVE_UP,
+} = {}) {
+  let failures = 0;
+  return {
+    // True while the tunnel is worth keeping; false once it should be torn
+    // down so the service manager can restart it with a fresh hostname.
+    async check(url) {
+      if (!url) return true;
+      const healthy = await probe(url).catch(() => false);
+      failures = healthy ? 0 : failures + 1;
+      return failures < failuresBeforeGiveUp;
+    },
+  };
+}
+
+async function defaultProbe(url) {
+  const response = await fetch(`${url}/healthz`, { signal: AbortSignal.timeout(15000) });
+  return response.ok;
+}
 
 async function main() {
   const config = loadConfig();
@@ -50,37 +129,38 @@ async function main() {
   child.on('exit', (code) => process.exit(code ?? 1));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
 
-  let registered = false;
+  const registrar = createWebhookRegistrar({
+    register: (endpoint) => setWebhookEndpoint(endpoint, { token: config.lineChannelAccessToken }),
+    onGiveUp: (url) => {
+      console.error(`LINE would not accept ${url}/webhook; giving up so the service manager can retry`);
+      child.kill('SIGTERM');
+    },
+  });
+  const watchdog = createHealthWatchdog();
+
   const deadline = Date.now() + URL_TIMEOUT_MS;
+  let sawHostname = false;
   const onOutput = async (chunk) => {
     process.stderr.write(chunk);
-    if (registered) return;
-    const url = extractTunnelUrl(chunk.toString());
-    if (!url) {
-      if (Date.now() > deadline) {
-        console.error('no tunnel URL within 60s; giving up so the service manager can retry');
-        child.kill('SIGTERM');
-      }
+    const text = chunk.toString();
+    sawHostname = sawHostname || Boolean(extractTunnelUrl(text));
+    if (!sawHostname && Date.now() > deadline) {
+      console.error('no tunnel URL within 60s; giving up so the service manager can retry');
+      child.kill('SIGTERM');
       return;
     }
-    registered = true;
-    for (let attempt = 1; ; attempt += 1) {
-      try {
-        await setWebhookEndpoint(`${url}/webhook`, { token: config.lineChannelAccessToken });
-        console.error(`webhook endpoint set to ${url}/webhook`);
-        return;
-      } catch (error) {
-        console.error(`attempt ${attempt}: ${error.message}`);
-        if (attempt >= REGISTER_RETRIES) {
-          child.kill('SIGTERM');
-          return;
-        }
-        await sleep(3000);
-      }
-    }
+    await registrar.observe(text);
   };
   child.stdout.on('data', onOutput);
   child.stderr.on('data', onOutput);
+
+  const health = setInterval(async () => {
+    if (await watchdog.check(registrar.registeredUrl)) return;
+    console.error(`${registrar.registeredUrl} stopped answering; tearing the tunnel down so the service manager can restart it`);
+    clearInterval(health);
+    child.kill('SIGTERM');
+  }, HEALTH_INTERVAL_MS);
+  health.unref?.();
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);

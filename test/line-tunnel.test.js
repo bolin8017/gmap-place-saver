@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractTunnelUrl, setWebhookEndpoint } from '../line/tunnel.js';
+import { extractTunnelUrl, setWebhookEndpoint, createWebhookRegistrar, createHealthWatchdog } from '../line/tunnel.js';
 
 test('extractTunnelUrl finds the quick-tunnel URL in cloudflared output', () => {
   const banner = [
@@ -39,4 +39,146 @@ test('setWebhookEndpoint throws on a non-2xx response', async () => {
     () => setWebhookEndpoint('https://x.trycloudflare.com/webhook', { token: 'bad', fetchImpl }),
     /401/,
   );
+});
+
+const banner = (host) => [
+  'INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |',
+  `INF |  https://${host}.trycloudflare.com                                                          |`,
+].join('\n');
+
+test('the registrar points LINE at the first hostname cloudflared announces', async () => {
+  const registered = [];
+  const registrar = createWebhookRegistrar({ register: async (e) => { registered.push(e); }, log: () => {} });
+
+  await registrar.observe(banner('first-one'));
+
+  assert.deepEqual(registered, ['https://first-one.trycloudflare.com/webhook']);
+  assert.equal(registrar.registeredUrl, 'https://first-one.trycloudflare.com');
+});
+
+test('a reconnect with a NEW hostname is re-registered, not ignored', async () => {
+  // The outage of 2026-08: the tunnel died server-side, cloudflared came back
+  // with a different quick-tunnel hostname, and the old boolean latch made the
+  // supervisor drop it on the floor — LINE kept a dead endpoint for two weeks.
+  const registered = [];
+  const registrar = createWebhookRegistrar({ register: async (e) => { registered.push(e); }, log: () => {} });
+
+  await registrar.observe(banner('first-one'));
+  await registrar.observe(banner('second-one'));
+
+  assert.deepEqual(registered, [
+    'https://first-one.trycloudflare.com/webhook',
+    'https://second-one.trycloudflare.com/webhook',
+  ]);
+});
+
+test('the hostname already registered is never re-sent', async () => {
+  const registered = [];
+  const registrar = createWebhookRegistrar({ register: async (e) => { registered.push(e); }, log: () => {} });
+
+  await registrar.observe(banner('same-one'));
+  await registrar.observe(banner('same-one'));
+  await registrar.observe('INF Registered tunnel connection connIndex=0');
+
+  assert.equal(registered.length, 1);
+});
+
+test('registration retries a transient LINE failure before giving up', async () => {
+  const attempts = [];
+  const registrar = createWebhookRegistrar({
+    register: async (endpoint) => {
+      attempts.push(endpoint);
+      if (attempts.length < 3) throw new Error('HTTP 400 endpoint unreachable');
+    },
+    sleep: async () => {},
+    log: () => {},
+  });
+
+  await registrar.observe(banner('slow-dns'));
+
+  assert.equal(attempts.length, 3);
+  assert.equal(registrar.registeredUrl, 'https://slow-dns.trycloudflare.com');
+});
+
+test('a hostname that never registers is not remembered as registered', async () => {
+  const registrar = createWebhookRegistrar({
+    register: async () => { throw new Error('HTTP 401 unauthorized'); },
+    retries: 2,
+    sleep: async () => {},
+    log: () => {},
+  });
+
+  await registrar.observe(banner('doomed'));
+
+  assert.equal(registrar.registeredUrl, null);
+});
+
+test('the watchdog tolerates a single failed probe', async () => {
+  const watchdog = createHealthWatchdog({ probe: async () => false, failuresBeforeGiveUp: 3 });
+  assert.equal(await watchdog.check('https://x.trycloudflare.com'), true);
+  assert.equal(await watchdog.check('https://x.trycloudflare.com'), true);
+});
+
+test('the watchdog gives up after consecutive failed probes', async () => {
+  // cloudflared stays alive while reconnect-looping, so Restart=on-failure
+  // never fires; the only honest liveness signal is whether the endpoint LINE
+  // knows about actually answers.
+  const watchdog = createHealthWatchdog({ probe: async () => false, failuresBeforeGiveUp: 3 });
+  await watchdog.check('https://x.trycloudflare.com');
+  await watchdog.check('https://x.trycloudflare.com');
+  assert.equal(await watchdog.check('https://x.trycloudflare.com'), false);
+});
+
+test('one healthy probe clears the failure streak', async () => {
+  let healthy = false;
+  const watchdog = createHealthWatchdog({ probe: async () => healthy, failuresBeforeGiveUp: 3 });
+  await watchdog.check('https://x.trycloudflare.com');
+  await watchdog.check('https://x.trycloudflare.com');
+  healthy = true;
+  await watchdog.check('https://x.trycloudflare.com');
+  healthy = false;
+  assert.equal(await watchdog.check('https://x.trycloudflare.com'), true);
+});
+
+test('the watchdog never gives up before a hostname is registered', async () => {
+  const watchdog = createHealthWatchdog({ probe: async () => false, failuresBeforeGiveUp: 1 });
+  assert.equal(await watchdog.check(null), true);
+});
+
+test('a probe that throws counts as a failure, not a crash', async () => {
+  const watchdog = createHealthWatchdog({
+    probe: async () => { throw new Error('getaddrinfo ENOTFOUND'); },
+    failuresBeforeGiveUp: 1,
+  });
+  assert.equal(await watchdog.check('https://gone.trycloudflare.com'), false);
+});
+
+test('a hostname that never registers tears the tunnel down', async () => {
+  // Otherwise the supervisor sits there holding a hostname LINE never
+  // accepted, with no registered URL for the watchdog to probe — silent again.
+  let gaveUpOn = null;
+  const registrar = createWebhookRegistrar({
+    register: async () => { throw new Error('HTTP 401 unauthorized'); },
+    retries: 2,
+    sleep: async () => {},
+    log: () => {},
+    onGiveUp: (url) => { gaveUpOn = url; },
+  });
+
+  await registrar.observe(banner('doomed'));
+
+  assert.equal(gaveUpOn, 'https://doomed.trycloudflare.com');
+});
+
+test('a successful registration never reports giving up', async () => {
+  let gaveUp = false;
+  const registrar = createWebhookRegistrar({
+    register: async () => {},
+    log: () => {},
+    onGiveUp: () => { gaveUp = true; },
+  });
+
+  await registrar.observe(banner('fine'));
+
+  assert.equal(gaveUp, false);
 });
