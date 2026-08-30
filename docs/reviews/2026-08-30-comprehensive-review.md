@@ -109,11 +109,15 @@ on Node 22/24. No secrets tracked; `.gitignore` correctly covers `.env`,
   is false. Fix: on `EEXIST`, `lstat` the path and accept it only when it
   is a symlink already pointing at `shareWith`; otherwise throw and name
   the conflict.
-- **line-3 (L)** — `line/handlers.js:73-75` — the "already saved" dedupe
+- **line-3 (L)** — `line/handlers.js:82-85` — the "already saved" dedupe
   runs before `queue.push`, so two copies of the same URL sent seconds
-  apart both pass and both queue. The second save is idempotent in Maps,
-  but it writes a second history row and sends a second result card with
-  its own undo button. Fix: re-check `findHistory` inside the queued job.
+  apart both pass and both queue. **Corrected while fixing (2026-08-30):**
+  the first draft of this finding said both then save; writing the test
+  showed the queued job already re-checks `findHistory`, so the common path
+  was covered. The real gap is that the re-check matches on `mapsUrl` only —
+  a candidate resolved to an address+name query has none, so it saved twice
+  and wrote a second history row with its own undo button. Fix: re-check the
+  source url too, which every job has.
 - **line-4 (L)** — `line/handlers.js:92-93` — every candidate card writes
   a `cancel` pending record that is only consumed if the friend taps
   「先不存」. A confirmed save leaves it in `data/line-pending.json` for the
