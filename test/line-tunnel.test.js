@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractTunnelUrl, setWebhookEndpoint, createWebhookRegistrar, createHealthWatchdog } from '../line/tunnel.js';
+import { extractTunnelUrl, setWebhookEndpoint, createWebhookRegistrar, createHealthWatchdog, pushAdminMessage } from '../line/tunnel.js';
+import { adminTunnelAlert } from '../line/messages.js';
 
 test('extractTunnelUrl finds the quick-tunnel URL in cloudflared output', () => {
   const banner = [
@@ -181,4 +182,53 @@ test('a successful registration never reports giving up', async () => {
   await registrar.observe(banner('fine'));
 
   assert.equal(gaveUp, false);
+});
+
+test('the admin is pushed a message when the tunnel gives up', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => { calls.push({ url, init }); return { ok: true, status: 200 }; };
+
+  const sent = await pushAdminMessage(adminTunnelAlert('the endpoint stopped answering'), {
+    token: 'tok', to: `U${'b'.repeat(32)}`, fetchImpl,
+  });
+
+  assert.equal(sent, true);
+  assert.equal(calls[0].url, 'https://api.line.me/v2/bot/message/push');
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer tok');
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.to, `U${'b'.repeat(32)}`);
+  assert.ok(body.messages[0].text.includes('the endpoint stopped answering'));
+});
+
+test('no admin id configured means no push attempt', async () => {
+  let called = false;
+  const sent = await pushAdminMessage(adminTunnelAlert('x'), {
+    token: 'tok', to: '', fetchImpl: async () => { called = true; return { ok: true }; },
+  });
+  assert.equal(sent, false);
+  assert.equal(called, false);
+});
+
+test('a failed admin push is reported, never thrown', async () => {
+  // The push is the last thing a dying supervisor does. If it threw here the
+  // process would die on the alert instead of on the failure it is reporting.
+  assert.equal(
+    await pushAdminMessage(adminTunnelAlert('x'), {
+      token: 'bad', to: `U${'b'.repeat(32)}`, fetchImpl: async () => ({ ok: false, status: 401, text: async () => 'nope' }),
+    }),
+    false,
+  );
+  assert.equal(
+    await pushAdminMessage(adminTunnelAlert('x'), {
+      token: 'tok', to: `U${'b'.repeat(32)}`, fetchImpl: async () => { throw new Error('ENETDOWN'); },
+    }),
+    false,
+  );
+});
+
+test('the tunnel alert tells the admin the bot is unreachable and why', () => {
+  const message = adminTunnelAlert('no answer from https://x.trycloudflare.com/healthz');
+  assert.equal(message.type, 'text');
+  assert.ok(message.text.includes('無法連線'));
+  assert.ok(message.text.includes('no answer from https://x.trycloudflare.com/healthz'));
 });

@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../src/config.js';
+import { adminTunnelAlert } from './messages.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -109,6 +110,23 @@ export function createHealthWatchdog({
   };
 }
 
+// Best-effort and never throwing: this is the last thing a dying supervisor
+// does, so a failed alert must not replace the failure it is reporting. The
+// tunnel being dead does not stop outbound calls to LINE.
+export async function pushAdminMessage(message, { token, to, fetchImpl = fetch } = {}) {
+  if (!to) return false;
+  try {
+    const response = await fetchImpl('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, messages: [message] }),
+    });
+    return Boolean(response.ok);
+  } catch {
+    return false;
+  }
+}
+
 async function defaultProbe(url) {
   const response = await fetch(`${url}/healthz`, { signal: AbortSignal.timeout(15000) });
   return response.ok;
@@ -129,12 +147,24 @@ async function main() {
   child.on('exit', (code) => process.exit(code ?? 1));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
 
+  const alertAdmin = (reason) => pushAdminMessage(adminTunnelAlert(reason), {
+    token: config.lineChannelAccessToken,
+    to: config.lineAdminUserId,
+  });
+  // Tearing the tunnel down recovers the outage we actually saw, but a restart
+  // loop that never recovers would be just as silent as the bug this file was
+  // written to fix. Both give-up paths happen at most once per process, so a
+  // stream of these means a real sustained outage — which is the thing worth
+  // being told about.
+  const giveUp = async (reason) => {
+    console.error(reason);
+    await alertAdmin(reason);
+    child.kill('SIGTERM');
+  };
+
   const registrar = createWebhookRegistrar({
     register: (endpoint) => setWebhookEndpoint(endpoint, { token: config.lineChannelAccessToken }),
-    onGiveUp: (url) => {
-      console.error(`LINE would not accept ${url}/webhook; giving up so the service manager can retry`);
-      child.kill('SIGTERM');
-    },
+    onGiveUp: (url) => giveUp(`LINE would not accept ${url}/webhook; giving up so the service manager can retry`),
   });
   const watchdog = createHealthWatchdog();
 
@@ -156,9 +186,8 @@ async function main() {
 
   const health = setInterval(async () => {
     if (await watchdog.check(registrar.registeredUrl)) return;
-    console.error(`${registrar.registeredUrl} stopped answering; tearing the tunnel down so the service manager can restart it`);
     clearInterval(health);
-    child.kill('SIGTERM');
+    await giveUp(`${registrar.registeredUrl} stopped answering; tearing the tunnel down so the service manager can restart it`);
   }, HEALTH_INTERVAL_MS);
   health.unref?.();
 }
