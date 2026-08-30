@@ -39,6 +39,12 @@ LOG_DIR="${LOG_DIR:-$REPO_ROOT/logs}"
 DISPLAY_ADDR=":${DISPLAY_NUM}"
 
 mkdir -p "$PROFILE" "$LOG_DIR"
+# The profile holds a full Google session. mkdir honours the umask (0775 under
+# a common 002), and Chromium does NOT tighten a directory that already exists
+# — only one it creates itself — so pre-creating it here is what leaves it
+# readable to other local users on the shared server this script is written
+# for. Mirrors what onboardUser does for LINE user homes.
+chmod 700 "$PROFILE"
 
 for tool in "$XVFB" "$X11VNC" "$NOVNC_PROXY" "$NODE_BIN" xauth mcookie; do
   command -v "$tool" >/dev/null 2>&1 || { echo "Required tool not found: $tool" >&2; exit 1; }
