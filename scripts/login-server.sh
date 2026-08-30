@@ -20,6 +20,18 @@
 # Required: GOOGLE_MAPS_PROFILE (where the persistent browser profile is stored).
 set -euo pipefail
 
+# Everything below drives an Xvfb X display this script starts itself, so the
+# ambient desktop session is irrelevant — but x11vnc disagrees: a WAYLAND_DISPLAY
+# inherited from a graphical terminal makes it refuse to start at all ("Wayland
+# display server detected ... Exiting."), even with -display pointed at our own
+# perfectly good X server. Chromium would likewise prefer Wayland over the
+# display we set up. Run from a tty or over ssh this never came up; run from a
+# desktop terminal on a Wayland session — which is how the admin alert tells
+# you to recover an expired login — the script died on a message about the
+# wrong display server.
+unset WAYLAND_DISPLAY
+export XDG_SESSION_TYPE=x11
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROFILE="${GOOGLE_MAPS_PROFILE:?Set GOOGLE_MAPS_PROFILE to the persistent profile path}"
 DISPLAY_NUM="${DISPLAY_NUM:-99}"
