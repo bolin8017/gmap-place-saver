@@ -203,7 +203,11 @@ gmap-place benchmark 100
 - Saves go only to the exact matching regional list — never a silent fallback.
 - A note is attached only when the page title **and** the note field's nearest
   ancestors both confirm the exact place; otherwise it is written to a local
-  sidecar JSONL record or refused.
+  sidecar JSONL record or refused. A sidecar written because targeting was not
+  provably safe reports `noteStatus: "sidecar"` and succeeds — that is the
+  guarantee working. One written because the browser crashed reports
+  `noteStatus: "sidecar_after_error"` and fails (CLI exit 1, MCP `isError`),
+  so an operational problem is never mistaken for the safety net doing its job.
 - An existing note is never replaced unless `overwrite` is explicitly set
   (CLI: `OVERWRITE_NOTE=1`); without it the new note goes to the sidecar and
   the existing text is returned as `previousText`.

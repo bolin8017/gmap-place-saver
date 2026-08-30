@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildNoteText, noteVerified, planNoteWrite } from '../src/maps/note.js';
+import { buildNoteText, noteVerified, planNoteWrite, sidecarOutcome } from '../src/maps/note.js';
+import { actionFailed } from '../src/run-utils.js';
 
 test('buildNoteText composes 來源/推薦 lines from source and summary', () => {
   assert.equal(
@@ -50,4 +51,31 @@ test('planNoteWrite writes over an existing note only with explicit overwrite', 
 test('planNoteWrite writes when the note field is empty', () => {
   assert.deepEqual(planNoteWrite({ existingText: '', overwrite: false }), { action: 'write', previousText: '' });
   assert.deepEqual(planNoteWrite({}), { action: 'write', previousText: '' });
+});
+
+test('a sidecar written because targeting was unsafe is a success', () => {
+  // The designed outcome: exact targeting could not be proven, so the note is
+  // kept locally rather than risking a sibling place. Nothing failed.
+  const result = sidecarOutcome({ reason: 'exact-place note field not found', sidecarFile: '/tmp/2026-08.jsonl' });
+  assert.equal(result.ok, true);
+  assert.equal(result.noteStatus, 'sidecar');
+  assert.equal(actionFailed(result), false);
+});
+
+test('a sidecar written because the browser died is a failure', () => {
+  // Same file on disk, entirely different thing: attachNote funnelled every
+  // exception through the same fallback, so a crashed Playwright run reached
+  // the CLI as exit 0 and MCP as a non-error result.
+  const result = sidecarOutcome({ reason: 'exception: Target closed', sidecarFile: '/tmp/2026-08.jsonl', crashed: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.noteStatus, 'sidecar_after_error');
+  assert.equal(actionFailed(result), true);
+});
+
+test('either way the note text is kept and the reason is carried', () => {
+  for (const crashed of [false, true]) {
+    const result = sidecarOutcome({ reason: 'why', sidecarFile: '/tmp/x.jsonl', crashed });
+    assert.equal(result.sidecarFile, '/tmp/x.jsonl');
+    assert.equal(result.reason, 'why');
+  }
 });

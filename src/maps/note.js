@@ -27,6 +27,20 @@ export function verificationMarker({ sourceUrl = '', recommendationSummary = '',
   return '';
 }
 
+// A sidecar record means the note text survived, but it is written for two
+// very different reasons. Exact targeting not being provably safe is the
+// design working — the note stayed local instead of landing on a sibling
+// place. A crashed browser is not that. actionFailed only reads `ok`, so
+// unless the crash says so there, the CLI exits 0 and MCP reports no error.
+export function sidecarOutcome({ reason, sidecarFile, crashed = false } = {}) {
+  return {
+    ok: !crashed,
+    noteStatus: crashed ? 'sidecar_after_error' : 'sidecar',
+    reason,
+    sidecarFile,
+  };
+}
+
 // Decide what to do with the note field's current content BEFORE typing.
 // Ctrl+A + type replaces the whole field, so a non-empty existing note is
 // only overwritten when the caller explicitly opts in; previousText is always
@@ -173,7 +187,7 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
   const marker = verificationMarker({ sourceUrl, recommendationSummary, noteText });
   const criteria = { expectedName, expectedAddress, targetList: listName, negativeNames, threshold };
 
-  const fallback = async (reason, extra = {}) => {
+  const fallback = async (reason, extra = {}, { crashed = false } = {}) => {
     if (mode === 'safeAttachOrSidecar') {
       const { file } = await writeSidecar({
         sourceUrl,
@@ -185,7 +199,7 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
         status: 'sidecar',
         reason,
       }, { config });
-      return { ok: true, noteStatus: 'sidecar', reason, sidecarFile: file, ...extra };
+      return { ...sidecarOutcome({ reason, sidecarFile: file, crashed }), ...extra };
     }
     return { ok: false, noteStatus: 'refused', reason, ...extra };
   };
@@ -257,7 +271,7 @@ export async function attachNote(payload = {}, { config = loadConfig(), mode = '
     };
   } catch (error) {
     await saveFailureArtifacts(page, { label: 'attach-note', dir: config.failureDir, error });
-    return await fallback(`exception: ${error.message}`);
+    return await fallback(`exception: ${error.message}`, {}, { crashed: true });
   } finally {
     await context.close();
   }
