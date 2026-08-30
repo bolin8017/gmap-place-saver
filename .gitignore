@@ -10,3 +10,6 @@ profile/
 profiles/
 # per-user LINE bot trees (Google sessions + friend PII)
 users/
+# local business research — this repo is public and these are competitor
+# analysis and monetization notes, so they stay out of it deliberately
+docs/research/
