@@ -23,6 +23,7 @@ test('MCP server starts over stdio and lists all tools', async () => {
       'resolve_place',
       'save_place',
       'smoke_check',
+      'unsave_place',
     ]);
   } finally {
     await client.close();
@@ -38,6 +39,7 @@ test('MCP server starts over stdio and lists all tools', async () => {
 // and overwrite decides whether an existing note survives.
 const misspelledWriteCalls = [
   ['save_place', { listName: '嘉義行', place_url: 'https://www.google.com/maps/search/?api=1&query=x', expected_name: '花媽包飯糰' }, /place_url/],
+  ['unsave_place', { listName: '嘉義行', expectedName: '花媽包飯糰', place_url: 'https://www.google.com/maps/place/x' }, /place_url/],
   ['attach_note', { expectedName: '花媽包飯糰', listName: '嘉義行', note_text: '早餐店' }, /note_text/],
   ['clear_note', { expectedName: '花媽包飯糰', listName: '嘉義行', negative_names: ['隔壁的店'] }, /negative_names/],
 ];

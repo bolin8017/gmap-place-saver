@@ -79,24 +79,28 @@ export function createHandlers({ line, userStore, pending, queue, core, config, 
       if (!confirmation || !confirmation.placeName) {
         return replyOrPush(replyToken, userId, messages.resolveFailedMessage());
       }
-      if (confirmation.mapsUrl) {
-        const dup = await findHistory({ mapsUrl: confirmation.mapsUrl }, { config: userConfig });
-        if (dup) return replyOrPush(replyToken, userId, messages.alreadySavedMessage(dup));
-      }
+      // The check before the queue cannot see a save that is still running, so
+      // a second copy of the same link sent mid-save gets here too. Re-check
+      // both keys: matching on mapsUrl alone missed candidates resolved to an
+      // address+name query, which have no maps url to match on.
+      const dup = await findHistory({ sourceUrl: url, mapsUrl: confirmation.mapsUrl }, { config: userConfig });
+      if (dup) return replyOrPush(replyToken, userId, messages.alreadySavedMessage(dup));
       if (!confirmation.targetList) {
         return replyOrPush(replyToken, userId, messages.cannotRouteMessage(confirmation.placeName));
       }
       if (confirmation.confidence === 'high') {
         return runSave({ userId, replyToken, userConfig, confirmation, sourceUrl: url });
       }
-      const confirmId = await pending.put('save', { userId, confirmation, sourceUrl: url }, CONFIRM_TTL_MS);
-      const cancelId = await pending.put('cancel', { userId }, CONFIRM_TTL_MS);
+      // Both buttons share one record: a second one for "cancel" only ever
+      // got taken when the friend declined, so every confirmed save left an
+      // orphan behind until its TTL.
+      const confirmId = await pending.put('confirm', { userId, confirmation, sourceUrl: url }, CONFIRM_TTL_MS);
       return replyOrPush(replyToken, userId, messages.candidateCard({
         placeName: confirmation.placeName,
         address: confirmation.address,
         listName: confirmation.targetList,
         confirmId,
-        cancelId,
+        cancelId: confirmId,
       }));
     });
   }
@@ -113,11 +117,16 @@ export function createHandlers({ line, userStore, pending, queue, core, config, 
     if (!record || record.payload.userId !== userId) {
       return replyOrPush(replyToken, userId, messages.expiredMessage());
     }
-    if (record.kind === 'cancel') {
-      return replyOrPush(replyToken, userId, messages.canceledMessage());
-    }
     const userConfig = core.loadConfig(userStore.userEnv(userId));
-    if (record.kind === 'save') {
+    if (record.kind === 'confirm') {
+      // Which of the card's two buttons was pressed is the one thing the
+      // record cannot say. Taking it from the postback is safe: the record's
+      // own payload decides WHAT is saved, and the id is already bound to this
+      // user — so the worst a tampered `t` can do is save the candidate the
+      // friend was just shown.
+      if (parsed.t === 'cancel') {
+        return replyOrPush(replyToken, userId, messages.canceledMessage());
+      }
       line.loading(userId).catch(() => {});
       return guarded(replyToken, userId, () => runSave({
         userId, replyToken, userConfig,

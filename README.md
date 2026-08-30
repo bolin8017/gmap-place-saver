@@ -85,6 +85,9 @@ variables already set in the real environment take precedence.
 | `GMAP_BENCHMARK_LOG` | Benchmark JSONL | `$GMAP_HOME/logs/gmap-benchmark.jsonl` |
 | `GMAP_FAILURE_DIR` | Failure artifacts (screenshots etc.) | `$GMAP_HOME/logs/failures` |
 | `GMAP_SIDECAR_DIR` | Local note sidecar records | `$GMAP_HOME/data/sidecar-notes` |
+| `GMAP_HISTORY_FILE` | Saved-place history (drives dedupe and undo) | `$GMAP_HOME/data/saved-history.jsonl` |
+| `GMAP_USERS_DIR` | Per-user LINE bot homes (profiles, region lists, history) | `$GMAP_HOME/users` |
+| `GMAP_LINE_PORT` | LINE webhook server port (bound to 127.0.0.1) | `3080` |
 | `GMAP_RETRIES` / `GMAP_RETRY_MIN_TIMEOUT_MS` | Navigation retry tuning | `2` / `750` |
 | `HEADLESS` | `0` runs the browser headed (e.g. to debug a save) | headless |
 | `GMAP_FAST_SOCIAL` | `0` disables the high-confidence social fast path | enabled |
@@ -169,14 +172,15 @@ restarting the gateway by sending `/reload-mcp` in Hermes.
 |---|---|---|
 | `resolve_place` | URL/text → one candidate + `savePayload` (or `needsBrowserSnapshot`) | only on the weaker path |
 | `save_place` | Save a confirmed candidate to the exact regional list (`dryRun` supported) | yes |
+| `unsave_place` | Remove a place from the exact regional list — the undo for `save_place` | yes |
 | `attach_note` | Attach a note to the exact place (via its saved list), else sidecar / refuse | yes |
 | `clear_note` | Remove the note on the exact place (via its saved list); returns previousText | yes |
 | `list_regions` | Return the region → list mapping | no |
 | `benchmark_summary` | Summarize resolver/save performance | no |
 | `smoke_check` | Safe diagnostics (node, Playwright, profile, region config) | no |
 
-The three tools that change the account — `save_place`, `attach_note`,
-`clear_note` — reject argument names they do not recognise: a misspelled key
+The four tools that change the account — `save_place`, `unsave_place`,
+`attach_note`, `clear_note` — reject argument names they do not recognise: a misspelled key
 (`place_url`) fails the call by name instead of being dropped, which would leave
 the save searching for nothing or the note aimed at a sibling place.
 `save_place` also needs `expectedName` — the save is confirmed only by finding
