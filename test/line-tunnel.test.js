@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractTunnelUrl, setWebhookEndpoint, createWebhookRegistrar, createHealthWatchdog, pushAdminMessage } from '../line/tunnel.js';
+import { extractTunnelUrl, setWebhookEndpoint, createWebhookRegistrar, createHealthWatchdog, pushAdminMessage, exitCodeAfterChild } from '../line/tunnel.js';
 import { adminTunnelAlert } from '../line/messages.js';
 
 test('extractTunnelUrl finds the quick-tunnel URL in cloudflared output', () => {
@@ -231,4 +231,22 @@ test('the tunnel alert tells the admin the bot is unreachable and why', () => {
   assert.equal(message.type, 'text');
   assert.ok(message.text.includes('無法連線'));
   assert.ok(message.text.includes('no answer from https://x.trycloudflare.com/healthz'));
+});
+
+test('a give-up exits non-zero even though cloudflared shut down cleanly', () => {
+  // Caught by a live give-up run on 2026-08-30: cloudflared handles SIGTERM
+  // gracefully and exits 0, so propagating its code made the supervisor exit 0
+  // too — and Restart=on-failure does not restart a clean exit. The tear-down
+  // ran, and nothing came back up.
+  assert.equal(exitCodeAfterChild({ givingUp: true, childCode: 0 }), 1);
+});
+
+test('cloudflared exiting on its own keeps its exit code', () => {
+  assert.equal(exitCodeAfterChild({ givingUp: false, childCode: 0 }), 0);
+  assert.equal(exitCodeAfterChild({ givingUp: false, childCode: 3 }), 3);
+});
+
+test('a child killed by a signal reports failure, not success', () => {
+  // code is null when the process died on a signal nobody asked us to send.
+  assert.equal(exitCodeAfterChild({ givingUp: false, childCode: null }), 1);
 });
