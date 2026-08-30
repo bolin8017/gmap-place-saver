@@ -259,6 +259,20 @@ needs one live run before it is believed.
 
 ### maps — src/maps/note.js
 
+- **login-3 (M) `[tested]`** — `scripts/login-server.sh` — found while
+  building a harness to verify sec-1, which is the only reason it was found at
+  all: the script could not be run on this machine. x11vnc refuses to start
+  when `WAYLAND_DISPLAY` is set — "Wayland display server detected ...
+  Exiting." — regardless of `-display` pointing at the Xvfb server the script
+  started and verified two lines earlier, and Chromium would prefer Wayland
+  over that display for the same reason. `logs/x11vnc.log` shows a working run
+  on 2026-08-10, from a tty, where `WAYLAND_DISPLAY` is absent. So it has been
+  broken the whole time for the way anyone would actually reach for it: the
+  bot's admin alert hands the operator this exact command to recover an
+  expired Google session, and it gets pasted into a desktop terminal. Fixed in
+  #43 by unsetting `WAYLAND_DISPLAY`; verified before (exit 1) and after
+  (exit 0, noVNC URL and password printed) on a live Wayland session.
+
 - **note-1 (L)** — `src/maps/note.js:258-260` — `attachNote`'s catch-all funnels
   every exception into `fallback('exception: …')`, which under the default
   `safeAttachOrSidecar` mode returns `{ ok: true, noteStatus: 'sidecar' }`.
@@ -298,9 +312,21 @@ needs one live run before it is believed.
 
 ## Roadmap (addendum)
 
-7. **`fix(login-server): keep the profile directory private`** — sec-2.
-   One `chmod`, verifiable here. Small.
-8. **`fix(login-server): keep the VNC password out of argv`** — sec-1.
-   Needs a machine with x11vnc to verify; do not merge on reasoning alone.
-9. **`fix(note): distinguish a crashed attach from a refused one`** — note-1.
-   Small, and testable through `actionFailed`.
+7. ~~**`fix(login-server): keep the profile directory private`** — sec-2.~~
+   Shipped as #42.
+8. ~~**`fix(login-server): keep the VNC password out of argv`** — sec-1.~~
+   Shipped as #45. The caveat here said not to merge it on reasoning alone,
+   and that held: x11vnc was fetched with `apt-get download` and unpacked
+   locally (no root), so the fix could be tested. An RFB handshake probe
+   confirmed the server offers security type 2 (VNC Authentication) under
+   `-passwdfile` and type 1 (None) with no password option — the control that
+   made the result mean something, since a silently unauthenticated VNC would
+   have been worse than the leak.
+9. ~~**`fix(note): distinguish a crashed attach from a refused one`** — note-1.~~
+   Shipped as #44.
+10. ~~**`fix(login-server): ignore the desktop's Wayland session`** — login-3.~~
+   Shipped as #43.
+
+Everything in both passes is now shipped except **note-2**, which was recorded
+as an observation rather than a defect — the attach path is simply the
+project's slowest and least test-covered, and nothing about it is wrong.
