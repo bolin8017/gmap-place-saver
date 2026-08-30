@@ -29,7 +29,7 @@ const postbackEvent = (userId, data, replyToken = 'rt-2') => ({
   type: 'postback', replyToken, source: { userId }, postback: { data },
 });
 
-async function makeWorld(t, { resolveResult = highConfidence, saveResult, unsaveResult, failReply = false } = {}) {
+async function makeWorld(t, { resolveResult = highConfidence, saveResult, unsaveResult, failReply = false, saveGate } = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gmap-handlers-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   const userConfig = { historyFile: path.join(dir, 'history.jsonl'), profile: path.join(dir, 'profile') };
@@ -47,7 +47,7 @@ async function makeWorld(t, { resolveResult = highConfidence, saveResult, unsave
   const core = {
     loadConfig: () => userConfig,
     resolvePlace: async (input) => { calls.resolve.push(input); return resolveResult; },
-    savePlace: async (payload) => { calls.save.push(payload); return saveResult ?? { successLikely: true, signInVisible: false }; },
+    savePlace: async (payload) => { calls.save.push(payload); await saveGate; return saveResult ?? { successLikely: true, signInVisible: false }; },
     unsavePlace: async (payload) => { calls.unsave.push(payload); return unsaveResult ?? { successLikely: true, signInVisible: false }; },
     attachNote: async (payload) => { calls.note.push(payload); return { ok: true }; },
   };
@@ -57,15 +57,17 @@ async function makeWorld(t, { resolveResult = highConfidence, saveResult, unsave
     userEnv: () => ({}),
     allowlist: async () => ({ [USER]: { name: '小美' } }),
   };
-  const pending = createPendingStore(path.join(dir, 'pending.json'));
+  const pendingFile = path.join(dir, 'pending.json');
+  const pending = createPendingStore(pendingFile);
   const handlers = createHandlers({
     line, userStore, pending, queue: createQueue(), core,
     config: { lineAdminUserId: ADMIN }, log: (...args) => logs.push(args.join(' ')),
   });
-  return { userConfig, sent, calls, line, pending, handlers, logs };
+  const storedPending = async () => JSON.parse(await fs.readFile(pendingFile, 'utf8').catch(() => '{}'));
+  return { userConfig, sent, calls, line, pending, storedPending, handlers, logs };
 }
 
-const firstReplyText = (sent) => sent.replies[0].msgs[0].text || '';
+const firstReplyText = (sent, i = 0) => sent.replies[i].msgs[0].text || '';
 
 test('a stranger is rejected and triggers no core work', async (t) => {
   const w = await makeWorld(t);
@@ -195,4 +197,63 @@ test('a rejected stranger is logged so the admin can onboard them', async (t) =>
   const stranger = `U${'f'.repeat(32)}`;
   await w.handlers.handleEvent(msgEvent(stranger, IG_URL));
   assert.ok(w.logs.some((line) => line.includes(stranger)));
+});
+
+test('a duplicate that arrives mid-save is not saved a second time', async (t) => {
+  // The already-saved check runs before the job is queued, so a second copy
+  // sent while the first is still in the browser passes it too. The queue then
+  // runs them in turn, and the second wrote another history row and another
+  // undo card for a place that was already saved.
+  let release;
+  const w = await makeWorld(t, { saveGate: new Promise((r) => { release = r; }) });
+  const first = w.handlers.handleEvent(msgEvent(USER, IG_URL, 'rt-a'));
+  const second = w.handlers.handleEvent(msgEvent(USER, IG_URL, 'rt-b'));
+  // Both pre-checks have now run; the first job is parked inside savePlace,
+  // so no history exists for the second one to have seen.
+  await new Promise((r) => setTimeout(r, 20));
+  release();
+  await Promise.all([first, second]);
+
+  assert.equal(w.calls.save.length, 1);
+  assert.equal((await readHistory({ config: w.userConfig })).length, 1);
+  assert.ok(w.sent.replies.some((r) => (r.msgs[0].text || '').includes('存過')));
+});
+
+test('a duplicate mid-save is caught even when the candidate has no maps url', async (t) => {
+  // The in-job re-check only looks at mapsUrl, so a candidate resolved to an
+  // address+name query (no maps url) slipped past it and saved twice.
+  const noMapsUrl = { confirmation: { ...highConfidence.confirmation, mapsUrl: '' } };
+  let release;
+  const w = await makeWorld(t, { resolveResult: noMapsUrl, saveGate: new Promise((r) => { release = r; }) });
+  const first = w.handlers.handleEvent(msgEvent(USER, IG_URL, 'rt-a'));
+  const second = w.handlers.handleEvent(msgEvent(USER, IG_URL, 'rt-b'));
+  await new Promise((r) => setTimeout(r, 20));
+  release();
+  await Promise.all([first, second]);
+
+  assert.equal(w.calls.save.length, 1);
+  assert.equal((await readHistory({ config: w.userConfig })).length, 1);
+});
+
+test('confirming a candidate leaves only the undo record behind', async (t) => {
+  const medium = { confirmation: { ...highConfidence.confirmation, confidence: 'medium' } };
+  const w = await makeWorld(t, { resolveResult: medium });
+  await w.handlers.handleEvent(msgEvent(USER, IG_URL));
+  const card = w.sent.replies[0].msgs[0];
+  await w.handlers.handleEvent(postbackEvent(USER, card.contents.footer.contents[0].action.data));
+
+  const kinds = Object.values(await w.storedPending()).map((r) => r.kind);
+  assert.deepEqual(kinds, ['undo']);
+});
+
+test('declining a candidate leaves nothing behind', async (t) => {
+  const medium = { confirmation: { ...highConfidence.confirmation, confidence: 'medium' } };
+  const w = await makeWorld(t, { resolveResult: medium });
+  await w.handlers.handleEvent(msgEvent(USER, IG_URL));
+  const card = w.sent.replies[0].msgs[0];
+  await w.handlers.handleEvent(postbackEvent(USER, card.contents.footer.contents[1].action.data));
+
+  assert.equal(w.calls.save.length, 0);
+  assert.ok(firstReplyText(w.sent, 1).includes('先不存'));
+  assert.deepEqual(await w.storedPending(), {});
 });

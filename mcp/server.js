@@ -4,6 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { resolvePlace } from '../src/resolve/wrapper.js';
 import { savePlace } from '../src/maps/save.js';
+import { unsavePlace } from '../src/maps/unsave.js';
 import { attachNote, clearNote } from '../src/maps/note.js';
 import { listRegions } from '../src/index.js';
 import { benchmarkSummary } from '../src/storage/benchmark.js';
@@ -53,6 +54,19 @@ server.registerTool('save_place', {
     dryRun: z.boolean().optional(),
   }),
 }, async (args) => run(() => savePlace(args, {})));
+
+server.registerTool('unsave_place', {
+  title: 'Unsave place',
+  description: 'Remove a place from the EXACT regional Google Maps list it was saved to — the undo for save_place. Never call without knowing which list the place is actually in.',
+  // Strict, as for save_place: this one removes a saved place, and every
+  // argument that identifies it is what keeps the removal off another place.
+  inputSchema: z.strictObject({
+    placeUrl: z.string().describe('Google Maps URL of the place to remove'),
+    listName: z.string().describe('Exact saved-list name to remove it from'),
+    expectedName: z.string().describe('Expected place name; the removal is only confirmed by finding it on the page'),
+    expectedAddress: z.string().optional(),
+  }),
+}, async (args) => run(() => unsavePlace(args, {})));
 
 server.registerTool('attach_note', {
   title: 'Attach note',
