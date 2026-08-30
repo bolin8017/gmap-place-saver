@@ -152,6 +152,30 @@ test('a sign-in wall notifies the user and the admin', async (t) => {
   assert.equal(w.sent.pushes[0].to, ADMIN);
 });
 
+test('a sign-in wall hit while RESOLVING notifies the user and the admin', async (t) => {
+  // The session can expire before any save is attempted: resolveCandidate
+  // lands on the sign-in wall, so no name or address come back. Reporting
+  // that as "I can't read this link" sends the friend after a fix that cannot
+  // work, and leaves the admin unaware the login needs redoing.
+  const w = await makeWorld(t, {
+    resolveResult: {
+      signInVisible: true,
+      confirmation: { placeName: '', address: '', targetList: '', mapsUrl: '', confidence: 'low' },
+    },
+  });
+  await w.handlers.handleEvent(msgEvent(USER, IG_URL));
+  assert.ok(firstReplyText(w.sent).includes('登入'), firstReplyText(w.sent));
+  assert.equal(w.sent.pushes[0].to, ADMIN);
+  assert.equal(w.calls.save.length, 0);
+});
+
+test('a resolve that simply failed is still reported as unreadable', async (t) => {
+  const w = await makeWorld(t, { resolveResult: { signInVisible: false, confirmation: null } });
+  await w.handlers.handleEvent(msgEvent(USER, IG_URL));
+  assert.ok(firstReplyText(w.sent).includes('讀不出'));
+  assert.equal(w.sent.pushes.length, 0);
+});
+
 test('when the reply token is dead the result falls back to push', async (t) => {
   const w = await makeWorld(t, { failReply: true });
   await w.handlers.handleEvent(msgEvent(USER, IG_URL));

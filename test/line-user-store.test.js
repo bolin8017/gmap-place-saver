@@ -110,3 +110,52 @@ test('shareWith rejects an unknown or invalid source user', async (t) => {
   await assert.rejects(() => onboardUser(OTHER, '', { config, shareWith: `U${'d'.repeat(32)}` }), /not onboarded/);
   await assert.rejects(() => onboardUser(OTHER, '', { config, shareWith: '../oops' }), /invalid LINE user id/);
 });
+
+test('shareWith refuses a user who already has their own home', async (t) => {
+  // fs.symlink fails EEXIST here. Treating that as "already linked" left the
+  // pair unlinked while the allowlist recorded sharesWith and the CLI printed
+  // "no extra login needed" — she kept saving into her own profile, which has
+  // never been logged in.
+  const config = await tmpConfig(t);
+  const store = createUserStore({ config });
+  const OTHER = `U${'b'.repeat(32)}`;
+  const { home } = await onboardUser(USER, '小美', { config });
+  await fs.mkdir(path.join(home, 'profile'), { recursive: true });
+  await onboardUser(OTHER, '小明', { config });
+
+  await assert.rejects(
+    () => onboardUser(OTHER, '小明', { config, shareWith: USER }),
+    /already has its own home/,
+  );
+  assert.equal((await store.allowlist())[OTHER].sharesWith, undefined);
+});
+
+test('re-onboarding an already-shared user keeps the existing link', async (t) => {
+  const config = await tmpConfig(t);
+  const store = createUserStore({ config });
+  const OTHER = `U${'b'.repeat(32)}`;
+  const { home } = await onboardUser(USER, '小美', { config });
+  await fs.mkdir(path.join(home, 'profile'), { recursive: true });
+
+  await onboardUser(OTHER, '小明', { config, shareWith: USER });
+  await onboardUser(OTHER, '小明', { config, shareWith: USER });
+
+  assert.equal(await fs.realpath(store.userDir(OTHER)), await fs.realpath(home));
+  assert.equal((await store.allowlist())[OTHER].sharesWith, USER);
+});
+
+test('shareWith refuses to repoint a user already sharing another account', async (t) => {
+  const config = await tmpConfig(t);
+  const OTHER = `U${'b'.repeat(32)}`;
+  const THIRD = `U${'c'.repeat(32)}`;
+  const { home } = await onboardUser(USER, '小美', { config });
+  await fs.mkdir(path.join(home, 'profile'), { recursive: true });
+  const third = await onboardUser(THIRD, '小華', { config });
+  await fs.mkdir(path.join(third.home, 'profile'), { recursive: true });
+  await onboardUser(OTHER, '小明', { config, shareWith: USER });
+
+  await assert.rejects(
+    () => onboardUser(OTHER, '小明', { config, shareWith: THIRD }),
+    /already shares/,
+  );
+});

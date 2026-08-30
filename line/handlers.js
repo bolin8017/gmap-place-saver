@@ -75,6 +75,15 @@ export function createHandlers({ line, userStore, pending, queue, core, config, 
     line.loading(userId).catch(() => {});
     return guarded(replyToken, userId, async () => {
       const resolved = await core.resolvePlace(url, { config: userConfig });
+      // An expired session shows up here first — the browser lands on the
+      // sign-in wall, so no name or address come back. Without this the friend
+      // is told the link is unreadable and the admin never learns the login
+      // needs redoing.
+      if (resolved.signInVisible) {
+        await replyOrPush(replyToken, userId, messages.sessionExpiredMessage());
+        await notifyAdmin(userId);
+        return;
+      }
       const confirmation = resolved.confirmation;
       if (!confirmation || !confirmation.placeName) {
         return replyOrPush(replyToken, userId, messages.resolveFailedMessage());

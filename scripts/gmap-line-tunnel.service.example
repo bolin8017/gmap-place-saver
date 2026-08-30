@@ -4,7 +4,10 @@
 #
 # Runs a Cloudflare quick tunnel in front of the LINE webhook server and
 # re-registers the channel webhook endpoint each time the tunnel hostname
-# changes (line/tunnel.js). PATH must reach both node and cloudflared.
+# changes (line/tunnel.js). It exits non-zero when the registered endpoint
+# stops answering, which is what Restart=on-failure below recovers from —
+# cloudflared itself stays alive while reconnect-looping, so its own exit code
+# is not a liveness signal. PATH must reach both node and cloudflared.
 [Unit]
 Description=gmap-place-saver LINE webhook tunnel
 After=network-online.target gmap-line-bot.service

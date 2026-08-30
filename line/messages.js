@@ -41,6 +41,13 @@ export function adminSessionAlert(userId, name) {
   return text(`⚠️ ${name || userId} 的 Google session 過期了,請重跑登入:\nGOOGLE_MAPS_PROFILE=users/${userId}/profile ./scripts/login-server.sh`);
 }
 
+// The whole point of the tunnel watchdog is that an unreachable bot used to
+// look exactly like a quiet one. This is the message that breaks that silence,
+// so it names the machine-side action rather than reassuring anyone.
+export function adminTunnelAlert(reason) {
+  return text(`⚠️ 機器人對外無法連線(${reason})。已自動重開 tunnel;若連續收到這則訊息,請上機器檢查:\n  systemctl --user status gmap-line-tunnel`);
+}
+
 export function alreadySavedMessage(entry) {
   const when = (entry.at || '').slice(0, 10);
   const link = entry.mapsUrl ? `\n${entry.mapsUrl}` : '';
