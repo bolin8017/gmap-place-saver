@@ -41,6 +41,8 @@ export async function resolvePlace(input, {
   fastSocial = config.fastSocial,
   useCache = true,
   writeCache = true,
+  // Injected so the sign-in reporting below can be tested without a browser.
+  resolveCandidate: lookupCandidate = resolveCandidate,
 } = {}) {
   const startNs = process.hrtime.bigint();
   const elapsedMs = () => Math.round(Number(process.hrtime.bigint() - startNs) / 1e6);
@@ -73,6 +75,7 @@ export async function resolvePlace(input, {
           candidate: null,
           fastPath: 'high-confidence-social',
           needsBrowserSnapshot: false,
+          signInVisible: false,
           needsConfirmation: true,
           confirmation: {
             placeName,
@@ -101,6 +104,7 @@ export async function resolvePlace(input, {
           social,
           candidate: null,
           needsBrowserSnapshot: true,
+          signInVisible: false,
           needsConfirmation: true,
           confirmation: null,
           elapsedMs: elapsedMs(),
@@ -114,7 +118,7 @@ export async function resolvePlace(input, {
       mapsQuery = input;
     }
 
-    candidate = await resolveCandidate({ query: mapsQuery, placeUrl, sourceUrl: input }, { config, useCache, writeCache });
+    candidate = await lookupCandidate({ query: mapsQuery, placeUrl, sourceUrl: input }, { config, useCache, writeCache });
     mark('candidate-lookup', { confidence: candidate.confidence, targetList: candidate.targetList });
 
     const candidateUseful = candidate?.confidence === 'high' || (candidate?.address && !isGenericPlaceName(candidate?.placeName));
@@ -130,6 +134,10 @@ export async function resolvePlace(input, {
       social,
       candidate,
       needsBrowserSnapshot: false,
+      // The browser step is where an expired Google session shows up first,
+      // long before any save is attempted. Callers must be able to tell that
+      // apart from "this link has no place in it".
+      signInVisible: Boolean(candidate?.signInVisible),
       needsConfirmation: true,
       confirmation: {
         placeName,
@@ -157,6 +165,9 @@ export async function resolvePlace(input, {
       social,
       candidate,
       needsBrowserSnapshot: mode === 'social',
+      // A crash is not a sign-in wall: only a page that actually showed one
+      // may page the admin.
+      signInVisible: Boolean(candidate?.signInVisible),
       needsConfirmation: true,
       confirmation: null,
       elapsedMs: elapsedMs(),

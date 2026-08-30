@@ -5,6 +5,7 @@ import { chromium } from 'playwright';
 import { loadConfig } from '../config.js';
 import { runWithRetry, saveFailureArtifacts } from '../run-utils.js';
 import { loadRegionEntries, mapsSearchUrl, matchTargetLists } from './social.js';
+import { signInRequired } from '../maps/save.js';
 import { appendBenchmark } from '../storage/benchmark.js';
 import { writeJsonAtomic } from '../storage/json-file.js';
 
@@ -242,7 +243,10 @@ export async function resolveCandidate({ query = '', placeUrl = '', sourceUrl = 
     const currentUrl = page.url();
     const mapsUrl = currentUrl.includes('/maps/place') ? currentUrl : mapsSearchUrl(address ? `${title} ${address}` : placeQuery);
     const targetList = inferTargetListFromPage(regionEntries, address, bodyText);
-    const signInVisible = await page.locator('a:has-text("Sign in"), button:has-text("Sign in"), a:has-text("登入"), button:has-text("登入")').first().isVisible({ timeout: 2000 }).catch(() => false);
+    // Same detection as savePlace: on accounts.google.com the page IS the
+    // sign-in, so nothing matches a 登入 control and the flag would read false.
+    const signInControlVisible = await page.locator('a:has-text("Sign in"), button:has-text("Sign in"), a:has-text("登入"), button:has-text("登入")').first().isVisible({ timeout: 2000 }).catch(() => false);
+    const signInVisible = signInRequired({ url: page.url(), signInControlVisible });
 
     const confidence = title && address ? 'high' : (title && !isGenericTitle(title) ? 'medium' : 'low');
     const candidate = {
