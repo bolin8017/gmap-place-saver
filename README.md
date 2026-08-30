@@ -244,7 +244,12 @@ are only a fallback, so the free LINE plan is plenty for a trusted circle.
    (or install `scripts/gmap-line-tunnel.service.example` as a systemd user
    unit) — it runs a quick tunnel and re-registers the channel's webhook
    endpoint via the LINE API every time the temporary hostname changes, so no
-   domain is needed. Just enable webhooks once in the console. Alternatively
+   domain is needed. Just enable webhooks once in the console. It also probes
+   the registered endpoint once a minute and tears the tunnel down after three
+   consecutive failures, so a quick tunnel that dies server-side is restarted
+   instead of leaving the bot silently unreachable — and pushes
+   `LINE_ADMIN_USER_ID` a message on the way out, so a restart loop that never
+   recovers is not silent either. Alternatively
    run a named tunnel for a stable hostname (requires a Cloudflare-managed
    domain) and set `https://<tunnel-host>/webhook` manually.
 
