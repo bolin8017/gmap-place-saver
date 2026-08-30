@@ -110,6 +110,16 @@ export function createHealthWatchdog({
   };
 }
 
+// cloudflared handles SIGTERM gracefully and exits 0, so propagating its code
+// after a tear-down WE ordered told systemd the service had finished its work
+// — and Restart=on-failure does not restart a clean exit. Every give-up must
+// look like a failure, because that is the only thing that brings the tunnel
+// back.
+export function exitCodeAfterChild({ givingUp = false, childCode = null } = {}) {
+  if (givingUp) return 1;
+  return childCode ?? 1;
+}
+
 // Best-effort and never throwing: this is the last thing a dying supervisor
 // does, so a failed alert must not replace the failure it is reporting. The
 // tunnel being dead does not stop outbound calls to LINE.
@@ -143,8 +153,9 @@ async function main() {
     console.error(`failed to start cloudflared: ${error.message}`);
     process.exit(1);
   });
+  let givingUp = false;
   // Exit with cloudflared so the service manager restarts the pair together.
-  child.on('exit', (code) => process.exit(code ?? 1));
+  child.on('exit', (code) => process.exit(exitCodeAfterChild({ givingUp, childCode: code })));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
 
   const alertAdmin = (reason) => pushAdminMessage(adminTunnelAlert(reason), {
@@ -157,6 +168,7 @@ async function main() {
   // stream of these means a real sustained outage — which is the thing worth
   // being told about.
   const giveUp = async (reason) => {
+    givingUp = true;
     console.error(reason);
     await alertAdmin(reason);
     child.kill('SIGTERM');
@@ -175,8 +187,7 @@ async function main() {
     const text = chunk.toString();
     sawHostname = sawHostname || Boolean(extractTunnelUrl(text));
     if (!sawHostname && Date.now() > deadline) {
-      console.error('no tunnel URL within 60s; giving up so the service manager can retry');
-      child.kill('SIGTERM');
+      await giveUp('no tunnel URL within 60s; giving up so the service manager can retry');
       return;
     }
     await registrar.observe(text);
