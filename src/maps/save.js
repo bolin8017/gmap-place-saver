@@ -133,6 +133,14 @@ export function placeFound(body, expectedName, expectedAddress = '') {
   return body.includes(expectedName) && (!expectedAddress || body.includes(expectedAddress));
 }
 
+// Clicking 「新增清單」 can change the account even when the save then fails:
+// Google has been observed creating an empty 「未命名清單」 immediately instead
+// of asking for a name (logs/failures/2026-08-17T12-46-08). A failed create is
+// therefore not "nothing happened" — say so, so the stray list can be removed.
+export function strayListLikely({ newListClicked = false, listCreated = false } = {}) {
+  return Boolean(newListClicked && !listCreated);
+}
+
 // listSelected must be the VERIFIED aria-checked state, never the click attempt.
 export function assessSaveSuccess({ placeFoundLikely, saveClicked, listSelected, signInVisible }) {
   return Boolean(placeFoundLikely && saveClicked && listSelected && !signInVisible);
@@ -272,6 +280,7 @@ export async function savePlace({
     let listAlreadySelected = false;
     let listSelected = false;
     let listCreated = false;
+    let newListClicked = false;
     const listRowSelectors = [
       `div[role="menuitemradio"]:has-text("${listName}")`,
       `div[role="menuitemcheckbox"]:has-text("${listName}")`,
@@ -303,10 +312,15 @@ export async function savePlace({
       // The county list may simply not exist yet (lists are created lazily,
       // one per county on first save). "新增清單" in the save dialog both
       // creates the list and saves the place into it.
-      const newListClicked = await clickFirst(page, newListSelectors(), 'new list button', 4000);
-      if (newListClicked) {
-        const nameBox = page.locator('input[aria-label*="清單名稱"], input[aria-label*="List name"], div[role="dialog"] input[type="text"]').first();
-        await nameBox.waitFor({ state: 'visible', timeout: 8000 });
+      newListClicked = Boolean(await clickFirst(page, newListSelectors(), 'new list button', 4000));
+      // The name field is the one place this function used to report failure
+      // by throwing. A drifted dialog then surfaced as an exception rather
+      // than a result, which hid the fact that the click may already have
+      // created a list — see strayListLikely above.
+      const nameBox = page.locator('input[aria-label*="清單名稱"], input[aria-label*="List name"], div[role="dialog"] input[type="text"]').first();
+      const nameBoxVisible = newListClicked
+        && await nameBox.waitFor({ state: 'visible', timeout: 8000 }).then(() => true).catch(() => false);
+      if (nameBoxVisible) {
         await nameBox.fill(listName);
         const createClicked = await clickFirst(page, [
           'button:has-text("建立")',
@@ -327,6 +341,8 @@ export async function savePlace({
           listSelected = listCreated;
           console.error(`created new list and saved: ${listName} (verified=${listCreated})`);
         }
+      } else if (newListClicked) {
+        console.error(`create-list dialog never asked for a name; a stray 未命名清單 may now exist instead of ${listName}`);
       }
     }
     mark('list-selection-attempted');
@@ -366,6 +382,7 @@ export async function savePlace({
       listSelected,
       listAlreadySelected,
       listCreated,
+      strayListLikely: strayListLikely({ newListClicked, listCreated }),
       doneClicked: Boolean(doneClicked),
       finalTitle,
       finalUrl,

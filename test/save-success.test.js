@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, newListSelectors, listSelectionVerified, listAlreadySavedVerified, signInRequired, savePlace } from '../src/maps/save.js';
+import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, newListSelectors, listSelectionVerified, listAlreadySavedVerified, signInRequired, strayListLikely, savePlace } from '../src/maps/save.js';
 
 test('placeFound cannot confirm with an empty expectedName', () => {
   // ''.includes('') is true, so an empty name must be rejected explicitly —
@@ -109,4 +109,20 @@ test('savePlace refuses a call that names no place', async () => {
     savePlace({ listName: '嘉義行' }, { config: { profile: '/tmp/gmap-profile' } }),
     /placeUrl or placeQuery/,
   );
+});
+
+test('clicking 新增清單 without a created list leaves a stray list behind', () => {
+  // Observed live on 2026-08-17: 「新增清單」 opened a list editor on an
+  // already-created 「未命名清單」 instead of asking for a name, and the run
+  // threw. The account had changed; the caller was told only "exception".
+  assert.equal(strayListLikely({ newListClicked: true, listCreated: false }), true);
+});
+
+test('a list that was actually created is not a stray list', () => {
+  assert.equal(strayListLikely({ newListClicked: true, listCreated: true }), false);
+});
+
+test('a save into an existing list never reports a stray list', () => {
+  assert.equal(strayListLikely({ newListClicked: false, listCreated: false }), false);
+  assert.equal(strayListLikely({}), false);
 });
