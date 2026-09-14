@@ -61,6 +61,18 @@ test('extractPlaceName rejects a name left behind as punctuation', () => {
   assert.equal(extractPlaceName(caption, extractAddress(caption)), '');
 });
 
+test('extractPlaceName drops the emoji markers and account tag a caption puts around the name', () => {
+  // Three real /gmap runs saved the place but reported failure: save_place
+  // confirms a save by finding expectedName on the Maps page, and neither the
+  // line marker nor the shop's @account is part of the name Maps shows.
+  const markerAboveAddress = '只賣週二週四‼️\n\n🔍酥炸三角骨\n📌嘉義市西區保安里北興街413號\n⏰16:00-21:30週二周四';
+  assert.equal(extractPlaceName(markerAboveAddress, extractAddress(markerAboveAddress)), '酥炸三角骨');
+  const pinAboveAddress = '內用還有麥茶可以喝\n\n📌韓宵\n📍嘉義市東區成仁街225號\n⏰11:30-14:00';
+  assert.equal(extractPlaceName(pinAboveAddress, extractAddress(pinAboveAddress)), '韓宵');
+  const labelledWithAccount = '-\n📍鼻孔先生手作早午餐 @noseman_ \n📮嘉義市東區北門街73號\n⏰08:00-14:00';
+  assert.equal(extractPlaceName(labelledWithAccount, extractAddress(labelledWithAccount)), '鼻孔先生手作早午餐');
+});
+
 test('makeMapsQuery combines address and name; mapsSearchUrl encodes it', () => {
   const q = makeMapsQuery('小熊菓子', '彰化縣北斗鎮民族路82號', '');
   assert.equal(q, '彰化縣北斗鎮民族路82號 小熊菓子');
