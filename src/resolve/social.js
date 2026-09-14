@@ -134,6 +134,15 @@ export function stripSocialNoise(line) {
 // here as one — a resolve reported 「0903 995 801」, another 「：」.
 const hasLetters = (value) => /\p{L}/u.test(value);
 
+// Captions mark the name line with an emoji (📌韓宵) and tag the shop's account
+// after it (鼻孔先生手作早午餐 @noseman_). Maps shows neither, and save_place
+// confirms a save by finding the name on the page, so both have to go.
+const EDGE_EMOJI = /^[\p{Extended_Pictographic}\u{FE0F}\u{200D}\s]+|[\p{Extended_Pictographic}\u{FE0F}\u{200D}\s]+$/gu;
+
+function tidyName(value) {
+  return value.replace(/(?:^|\s)@[\w.]+/g, '').replace(EDGE_EMOJI, '').trim();
+}
+
 function stripPlaceLabel(value) {
   return stripSocialNoise(value).replace(/^(?:店名|餐廳|店家|地點|地址|位置)[:：\s]*/i, '').trim();
 }
@@ -164,14 +173,14 @@ export function extractPlaceName(text, address) {
   for (const pattern of strongPatterns) {
     const match = normalize(text).match(pattern);
     if (match?.[1]) {
-      const value = stripPlaceLabel(match[1]).replace(/(?:地址|營業|電話|訂位).*$/g, '').trim();
+      const value = tidyName(stripPlaceLabel(match[1]).replace(/(?:地址|營業|電話|訂位).*$/g, ''));
       if (value && hasLetters(value) && !address.includes(value) && !/(地址|營業|電話|時間)/.test(value)) return value;
     }
   }
   const addressLine = address ? lines.find((line) => line.includes(address) || address.includes(line)) : '';
   const addressIdx = addressLine ? lines.indexOf(addressLine) : -1;
   if (addressIdx > 0) {
-    const before = lines[addressIdx - 1].replace(/^[@#]+/, '').trim();
+    const before = tidyName(lines[addressIdx - 1].replace(/^[@#]+/, ''));
     // Captions put the phone, the price or the hours right above the address as
     // often as the name, and rejecting the labelled ones is not enough: a bare
     // 0903 995 801 carries no label at all.
