@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { placeFound, assessSaveSuccess, saveDialogWaitSelectors, newListSelectors, listSelectionVerified, listAlreadySavedVerified, signInRequired, strayListLikely, becameVisible, savePlace } from '../src/maps/save.js';
+import { placeFound, saveRefusal, normalizeAddress, sameStreetAddress, assessSaveSuccess, saveDialogWaitSelectors, newListSelectors, listSelectionVerified, listAlreadySavedVerified, signInRequired, strayListLikely, becameVisible, savePlace } from '../src/maps/save.js';
 
 test('placeFound cannot confirm with an empty expectedName', () => {
   // ''.includes('') is true, so an empty name must be rejected explicitly —
@@ -14,6 +14,25 @@ test('placeFound requires the name, and the address when given', () => {
   assert.equal(placeFound(body, '小熊菓子 新北斗店', '彰化縣北斗鎮民族路82號'), true);
   assert.equal(placeFound(body, '小熊菓子 新北斗店', '台北市中正區'), false);
   assert.equal(placeFound(body, '不存在的店'), false);
+});
+
+test('saveRefusal judges the detail heading, not the page body', () => {
+  // 2026-09-28: the search for 台灣Twozzim嘉義店 opened 韓灶 HANJIP and the run
+  // clicked save anyway; a retry then passed a body check on a results page.
+  assert.equal(saveRefusal({ heading: '韓灶 HANJIP', expectedName: '台灣Twozzim嘉義店-韓國燉雞' }), 'expected-name-not-on-page');
+  assert.equal(saveRefusal({ heading: '結果', expectedName: '韓灶 HANJIP' }), 'expected-name-not-on-page');
+  assert.equal(saveRefusal({ heading: '韓灶 HANJIP', expectedName: '' }), 'expected-name-not-on-page');
+  assert.equal(saveRefusal({ heading: '韓灶 HANJIP', expectedName: '韓灶 HANJIP' }), '');
+});
+
+test('sameStreetAddress ignores the postcode and 里 but refuses floors', () => {
+  assert.equal(normalizeAddress('600嘉義市東區文雅里大雅路一段730號'), '嘉義市東區大雅路一段730號');
+  assert.equal(sameStreetAddress('600嘉義市東區文雅里大雅路一段730號', '嘉義市東區大雅路一段730號'), true);
+  assert.equal(sameStreetAddress('臺北市大同區赤峰街33巷12號', '103台北市大同區赤峰街33巷12號'), true);
+  assert.equal(sameStreetAddress('600嘉義市東區文雅里大雅路一段730號', '嘉義市東區大雅路一段731號'), false);
+  assert.equal(sameStreetAddress('110台北市信義區松高路19號B1', '台北市信義區松高路19號B1'), false);
+  assert.equal(sameStreetAddress('台北市信義區松高路19號3樓', '台北市信義區松高路19號3樓'), false);
+  assert.equal(sameStreetAddress('', '嘉義市東區大雅路一段730號'), false);
 });
 
 test('assessSaveSuccess requires a VERIFIED list selection, not a click attempt', () => {
