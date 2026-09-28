@@ -36,6 +36,22 @@ function cleanPlaceName(name) {
   return (name || '').replace(/^(?:店名|餐廳|店家|地點)[:：\s]*/i, '').trim();
 }
 
+// saveEnv feeds the CLI; saveArgs is the same payload keyed exactly as the
+// save_place tool takes it. Agents renamed saveEnv's keys by hand and got them
+// wrong (place_url for placeUrl), costing a failed call each time.
+export function withSaveArgs(saveEnv) {
+  return {
+    saveEnv,
+    saveArgs: {
+      placeUrl: saveEnv.PLACE_URL || '',
+      placeQuery: saveEnv.PLACE_QUERY || '',
+      listName: saveEnv.LIST_NAME || '',
+      expectedName: saveEnv.EXPECTED_NAME || '',
+      expectedAddress: saveEnv.EXPECTED_ADDRESS || '',
+    },
+  };
+}
+
 export async function resolvePlace(input, {
   config = loadConfig(),
   fastSocial = config.fastSocial,
@@ -83,13 +99,13 @@ export async function resolvePlace(input, {
             targetList: social.targetList,
             mapsUrl: social.mapsUrl,
             confidence: social.confidence,
-            saveEnv: {
+            ...withSaveArgs({
               PLACE_URL: social.mapsUrl,
               PLACE_QUERY: `${social.address} ${placeName}`,
               LIST_NAME: social.targetList,
               EXPECTED_NAME: placeName,
               EXPECTED_ADDRESS: social.address,
-            },
+            }),
           },
           elapsedMs: elapsedMs(),
           steps,
@@ -145,13 +161,13 @@ export async function resolvePlace(input, {
         targetList,
         mapsUrl,
         confidence,
-        saveEnv: {
+        ...withSaveArgs({
           PLACE_URL: mapsUrl,
           PLACE_QUERY: address && placeName ? `${address} ${placeName}` : mapsQuery,
           LIST_NAME: targetList,
           EXPECTED_NAME: placeName,
           EXPECTED_ADDRESS: address,
-        },
+        }),
       },
       elapsedMs: elapsedMs(),
       steps,

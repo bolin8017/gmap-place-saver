@@ -58,3 +58,15 @@ test('a resolve that throws is not reported as a sign-in wall', async () => {
   assert.equal(result.signInVisible, false);
   assert.equal(result.confirmation, null);
 });
+
+test('withSaveArgs keys the payload exactly as save_place takes it', async () => {
+  const { withSaveArgs } = await import('../src/resolve/wrapper.js');
+  const { saveArgs } = withSaveArgs({
+    PLACE_URL: 'https://maps/x', PLACE_QUERY: '嘉義市東區大雅路一段730號 韓灶', LIST_NAME: '嘉義行',
+    EXPECTED_NAME: '韓灶', EXPECTED_ADDRESS: '嘉義市東區大雅路一段730號',
+  });
+  assert.deepEqual(saveArgs, {
+    placeUrl: 'https://maps/x', placeQuery: '嘉義市東區大雅路一段730號 韓灶', listName: '嘉義行',
+    expectedName: '韓灶', expectedAddress: '嘉義市東區大雅路一段730號',
+  });
+});
