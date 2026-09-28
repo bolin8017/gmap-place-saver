@@ -133,6 +133,31 @@ export function placeFound(body, expectedName, expectedAddress = '') {
   return body.includes(expectedName) && (!expectedAddress || body.includes(expectedAddress));
 }
 
+// Checked BEFORE the save button is clicked: once clicked, whatever place the
+// page shows is in the list. A search that lands on a neighbour is the case
+// this stops (2026-09-28: a /gmap run saved 韓灶 HANJIP for 台灣Twozzim嘉義店).
+// The detail panel's h1 is the judge: a results page lists the expected name
+// too, and a body-text check let one through to a save click. Only the name
+// gates; the address Maps shows (postcode, 里) rarely matches a caption's.
+export function saveRefusal({ heading = '', expectedName = '' } = {}) {
+  if (expectedName && heading.includes(expectedName)) return '';
+  return 'expected-name-not-on-page';
+}
+
+// Maps prefixes the postcode and inserts the 里; captions leave both out.
+export function normalizeAddress(address = '') {
+  return address.replace(/\s+/g, '').replace(/^\d{3,6}/, '').replace(/臺/g, '台')
+    .replace(/(?<=[區鄉鎮市])[^區鄉鎮市路街道段巷弄號]{1,4}[里村]/, '');
+}
+
+// Same street address, different name: usually the shop renamed or the post
+// uses a longer name than Maps. A floor in either address means a mall or a
+// food court, where one street address holds many shops — never retry there.
+export function sameStreetAddress(a = '', b = '') {
+  if (!a || !b || /\d+\s*(樓|[Ff]\b)|B\d|地下/.test(`${a} ${b}`)) return false;
+  return normalizeAddress(a) === normalizeAddress(b);
+}
+
 // waitFor rejects on timeout. Turning that into a boolean is what keeps a
 // drifted dialog a RESULT rather than an exception — the caller can then say
 // which step failed and what it may have left behind.
@@ -235,12 +260,46 @@ export async function savePlace({
     const currentUrl = page.url();
     // waitForAny fires on the first visible selector, often before the detail
     // panel finishes rendering — reading the body immediately makes
-    // placeFoundLikely a flaky false negative. Give the page time to actually
-    // show the expected name before judging.
+    // placeFoundLikely a flaky false negative. The panel's h1 is the place
+    // name, so once it renders a matching name is already there; the short
+    // grace after it replaces a flat 10 s wait that a wrong place always
+    // sat out in full.
+    const placeHeading = page.locator('div[role="main"] h1').first();
+    await becameVisible(placeHeading, 10000);
     const bodyAfterSearch = expectedName
-      ? await waitForBodyIncludes(page, expectedName, { timeout: 10000 })
+      ? await waitForBodyIncludes(page, expectedName, { timeout: 2000 })
       : await getBody(page);
     const placeFoundLikely = placeFound(bodyAfterSearch, expectedName, expectedAddress);
+    const shownName = (await placeHeading.innerText({ timeout: 1000 }).catch(() => '')).trim();
+    const refusal = saveRefusal({ heading: shownName, expectedName });
+
+    if (refusal && !dryRun) {
+      const shownAddress = (await page.locator('button[data-item-id="address"]').first()
+        .getAttribute('aria-label', { timeout: 1000 }).catch(() => '') || '').replace(/^(地址|Address)[:：]\s*/, '').trim();
+      const sameAddress = Boolean(shownName) && sameStreetAddress(shownAddress, expectedAddress);
+      mark('refused-before-save');
+      return {
+        placeQuery,
+        placeUrl,
+        listName,
+        title,
+        currentUrl,
+        placeFoundLikely,
+        refused: refusal,
+        shownName,
+        shownAddress,
+        sameAddress,
+        // Reopening the URL just checked lands on the place that was judged.
+        ...(sameAddress ? { retryArgs: { placeUrl: page.url(), listName, expectedName: shownName, expectedAddress: shownAddress } } : {}),
+        hint: sameAddress
+          ? 'Nothing was saved. Maps names this address differently; call save_place once with retryArgs unchanged.'
+          : 'Nothing was saved. The page is not the expected place; do not retry, report shownName/shownAddress.',
+        saveClicked: false,
+        successLikely: false,
+        elapsedMs: elapsedMs(),
+        phaseMarks: marks,
+      };
+    }
 
     if (dryRun) {
       return {

@@ -73,6 +73,16 @@ test('extractPlaceName drops the emoji markers and account tag a caption puts ar
   assert.equal(extractPlaceName(labelledWithAccount, extractAddress(labelledWithAccount)), '鼻孔先生手作早午餐');
 });
 
+test('extractPlaceName does not read a label word inside running text as a label', () => {
+  // A 2026-09-28 /gmap run took 資訊 from 「點開有店家資訊」 as the place name,
+  // so the save opened the address search, waited out the name check and
+  // saved whatever Maps showed there.
+  const caption = '點開有店家資訊⬇️\n📍台灣Twozzim嘉義店-韓國燉雞\n☎️0975-317-789\n🦐嘉義市東區大雅路一段730號\n🌵每人平均 400-600';
+  assert.equal(extractPlaceName(caption, extractAddress(caption)), '台灣Twozzim嘉義店-韓國燉雞');
+  const labelled = '店名：阿宗麵線\n地址：台北市萬華區峨眉街8號之1';
+  assert.equal(extractPlaceName(labelled, extractAddress(labelled)), '阿宗麵線');
+});
+
 test('makeMapsQuery combines address and name; mapsSearchUrl encodes it', () => {
   const q = makeMapsQuery('小熊菓子', '彰化縣北斗鎮民族路82號', '');
   assert.equal(q, '彰化縣北斗鎮民族路82號 小熊菓子');
@@ -103,4 +113,17 @@ test('ytDlpCommands keeps cookie options before the -- separator', () => {
   for (const [, args] of ytDlpCommands('https://x/', { ytdlpCookiesFromBrowser: 'firefox' })) {
     assert.ok(args.indexOf('--cookies-from-browser') < args.indexOf('--'));
   }
+});
+
+test('rederiveCached re-parses a cached caption so a parser fix reaches old links', async () => {
+  const { rederiveCached } = await import('../src/resolve/social.js');
+  const entries = [{ listName: '嘉義行', keywords: ['嘉義市'], pattern: /嘉義市/ }];
+  const caption = '點開有店家資訊⬇️\n📍台灣Twozzim嘉義店-韓國燉雞\n🦐嘉義市東區大雅路一段730號';
+  const fresh = rederiveCached(entries, { placeName: '資訊', address: '嘉義市東區大雅路一段730號', captionSnippet: caption });
+  assert.equal(fresh.placeName, '台灣Twozzim嘉義店-韓國燉雞');
+  assert.equal(fresh.targetList, '嘉義行');
+  // A snippet that no longer yields a full answer keeps the cached name.
+  const kept = rederiveCached(entries, { placeName: '某店', address: '嘉義市東區中山路1號', captionSnippet: '好吃' });
+  assert.equal(kept.placeName, undefined);
+  assert.equal(kept.targetList, '嘉義行');
 });

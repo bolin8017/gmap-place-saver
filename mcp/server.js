@@ -26,7 +26,7 @@ const run = async (fn) => {
 
 server.registerTool('resolve_place', {
   title: 'Resolve place',
-  description: 'Resolve a social URL, Google Maps URL, or text query into ONE candidate confirmation payload (with a reusable saveEnv/savePayload). Does not save anything — always confirm the candidate before calling save_place.',
+  description: 'Resolve a social URL, Google Maps URL, or text query into ONE candidate confirmation payload (with saveArgs to pass to save_place unchanged). Does not save anything.',
   inputSchema: {
     input: z.string().describe('Instagram/Threads/Facebook/Google Maps URL or free-text place query'),
     fastSocial: z.boolean().optional().describe('Allow the high-confidence social fast path (default true)'),

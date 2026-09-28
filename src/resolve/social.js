@@ -167,7 +167,9 @@ export function extractAddress(text) {
 export function extractPlaceName(text, address) {
   const lines = normalize(text).split('\n').map(stripSocialNoise).filter(Boolean);
   const strongPatterns = [
-    /(?:店名|餐廳|店家|地點|📍|🏠)[:：\s]*([^\n#。|｜]{2,35})/,
+    // A word label needs a separator after it: 「點開有店家資訊」 is running
+    // text, and without one its 資訊 was read as the name.
+    /(?:(?:店名|餐廳|店家|地點)[:：\s]|📍|🏠)[:：\s]*([^\n#。|｜]{2,35})/,
     /(?:來到|推薦|分享)\s*([^\n#。|｜]{2,25})(?:，|,|！|!|。)/,
   ];
   for (const pattern of strongPatterns) {
@@ -289,6 +291,31 @@ async function writeJson(file, value) {
   await writeJsonAtomic(file, value);
 }
 
+export function deriveFromCaption(regionEntries, caption) {
+  const address = extractAddress(caption);
+  const placeName = extractPlaceName(caption, address);
+  const mapsQuery = makeMapsQuery(placeName, address);
+  return {
+    placeName,
+    address,
+    ...routeByAddress(regionEntries, address),
+    mapsQuery,
+    mapsUrl: mapsSearchUrl(mapsQuery),
+    confidence: placeName && address ? 'high' : (address || placeName ? 'medium' : 'low'),
+    needsBrowserSnapshot: !(placeName && address),
+  };
+}
+
+// A cache entry keeps the name the parser produced when it was written, so a
+// parser fix never reached links resolved before it (a cached 資訊 kept being
+// served after the fix). Re-parse the stored caption; keep the cached fields
+// unless that yields a complete answer, since the snippet is cut at 900 chars.
+export function rederiveCached(regionEntries, cached) {
+  const fresh = cached.captionSnippet ? deriveFromCaption(regionEntries, cached.captionSnippet) : null;
+  if (fresh?.confidence === 'high') return fresh;
+  return routeByAddress(regionEntries, cached.address);
+}
+
 export async function resolveSocial(sourceUrl, {
   config = loadConfig(),
   useCache = true,
@@ -303,7 +330,7 @@ export async function resolveSocial(sourceUrl, {
 
   if (useCache) {
     const cache = await readJson(config.socialCache, {});
-    if (cache[key]) return { ...cache[key], ...routeByAddress(regionEntries, cache[key].address), cacheHit: true };
+    if (cache[key]) return { ...cache[key], ...rederiveCached(regionEntries, cache[key]), cacheHit: true };
   }
   let htmlResult = null;
   let meta = {};
@@ -332,26 +359,13 @@ export async function resolveSocial(sourceUrl, {
     extractCaptionFromYtDlp(yt?.data),
     extractCaptionFromMeta(meta),
   ]).join('\n'));
-  const address = extractAddress(caption);
-  const placeName = extractPlaceName(caption, address);
-  const { region, targetListCandidates, targetList } = routeByAddress(regionEntries, address);
-  const mapsQuery = makeMapsQuery(placeName, address);
-
   const result = {
     sourceUrl,
     finalUrl: htmlResult?.finalUrl || sourceUrl,
     sourceType: detectSourceType(htmlResult?.finalUrl || sourceUrl),
     method,
-    placeName,
-    address,
-    region,
-    targetList,
-    targetListCandidates,
-    mapsQuery,
-    mapsUrl: mapsSearchUrl(mapsQuery),
+    ...deriveFromCaption(regionEntries, caption),
     captionSnippet: caption.slice(0, 900),
-    confidence: placeName && address ? 'high' : (address || placeName ? 'medium' : 'low'),
-    needsBrowserSnapshot: !(placeName && address),
     errors,
     elapsedMs: elapsedMs(),
     resolvedAt: new Date().toISOString(),
